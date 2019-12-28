@@ -368,7 +368,11 @@ char *initSession(struct sockaddr_in cliAddr, int connd){
 //process while Code is ALERT
 char *alertCodeProcess(char messAcgument[],struct sockaddr_in cliAddr, int connd, int pos){
 	//found session
-	sess[pos].sessStatus = atoi(messAcgument);
+	if (atoi(messAcgument)==WAIT_FOR_USERNAME_SIGNUP && userCount == MAX_USER)
+	{
+		return C_MAX_USER;
+	}
+	sess[pos].sessStatus = atoi(messAcgument); //WAIT_FOR_USERNAME_SIGNUP
 	printStatus("ALERT",pos);
 	return C_CHANGED_STATUS;
 }
