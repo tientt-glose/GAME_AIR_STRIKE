@@ -9,8 +9,12 @@
 #include <arpa/inet.h>
 #include <time.h>
 
+#define UNKNOWN "UNKNOWN"
+
 #define BACKLOG 30
 #define BUFF_SIZE 8192
+#define SINIT "SINIT"
+#define ALERT "ALERT"
 #define LOGIN "LOGIN"
 #define UPASS "UPASS"
 #define LOGOU "LOGOU"
@@ -18,27 +22,48 @@
 #define SIGNP "SIGNP"
 #define SIGNC "SIGNC"
 
+// Message tra ve client 
+#define C_CHANGED_STATUS "99"
+#define C_INIT_SUCESS "100"
+
+// Signup
+// SS: WAIT_FOR_USERNAME_SIGNUP 11
+#define C_SAME_USER "110"
+#define C_NEW_USER "111"
+#define C_MAX_USER "112"
+// SS: WAIT_FOR_PASS 12
+#define C_CORRECT_PASS "120"
+#define C_INCORRECT_PASS "121"
+
+
+
 #define C_FOUND_ID "00"
 #define C_NOT_FOUND_ID "01"
-#define C_FOUND_PASSWORD "10"
-#define C_NOT_FOUND_PASSWORD "11"
 #define C_LOGOUT_OK "20"
 #define C_LOGOUT_FAILS "21"
 #define C_BLOCK "31"
-#define C_NEW_USER "40"
-#define C_SAME_USER "41"
-#define C_CORRECT_PASS "50"
-#define C_INCORRECT_PASS "51"
+
+#define C_FOUND_PASSWORD "10"
+#define C_NOT_FOUND_PASSWORD "11"
 #define C_CORRECT_CODE "60"
 #define C_INCORRECT_CODE "61"
+
+// Status cua server
+#define WAIT_FOR_REQUEST 0
+#define WAIT_FOR_USERNAME_SIGNUP 11
+#define WAIT_FOR_PASS 12
 
 #define NOT_IDENTIFIED_USER 1
 #define NOT_AUTHENTICATED 2
 #define AUTHENTICATED 3
 #define START_SIGNUP 4
-#define USERNAME_CREATED 5
+
 #define PASSWORD_CREATED 6
 #define SIGNUP_SUCCESSFUL 7
+
+// Status isLogin cua session
+#define NOT_LOGIN 0
+#define LOGIN 1
 
 #define BLOCKED 0
 #define ACTIVE 1
@@ -68,6 +93,7 @@ struct Session
 {
 	struct User user;
 	int sessStatus;
+	int isLogin;
 	int countLogin;
 	int connd;
 	char capcha[6];
@@ -101,6 +127,7 @@ struct Session newSession(struct User user, int sessStatus, struct sockaddr_in c
 	struct Session session;
 	session.user = user;
 	session.sessStatus = sessStatus;
+	session.isLogin = NOT_LOGIN;
 	session.cliAddr = cliAddr;
 	session.countLogin = 0;
 	session.connd = connd;
@@ -117,6 +144,14 @@ void printSession(int pos)
 	// to do diff -> printRoom
 }
 
+void printStatus(char when[],int pos){
+	if (pos < 0) return;
+	printf("%s: \n",when);
+	printf("\tSession pos: %d\n", pos);
+	printf("\tSession status: %d\n", sess[pos].sessStatus);
+	printf("\tSession user: %s\n", sess[pos].user.id);
+}
+
 // To do diff
 
 //check message from client is valid? //need refine
@@ -127,12 +162,13 @@ int isValidMessage(char message[], char messCode[], char messAcgument[])
 		messCode[i] = message[i];
 	}
 	messCode[i] = '\0';
-	if (message[i] != ' ') return 0; printf("ok\n");
+	if (message[i] != ' ') return 0;
 	while (message[++i] != '\n'){
 		messAcgument[j++] = message[i];
 		if (message[i] == ' ') return 0;
 	}
 	messAcgument[j] = '\0';
+	// printf("|%s|_|%s|\n",messCode,messAcgument);
 	return 1;
 }
 
@@ -185,12 +221,13 @@ void showUser()
 {
 	int i;
 	printf("List user information: \n");
-	for (i = 0; users[i].count != 0; i++ )
+	for (i = 0; users[i].count <= MAX_USER && users[i].count>0; i++ )
 	{
 		printf("----------------------------------------------\n");
 		printf("Id : %s\n",users[i].id);
 		printf("Password : %s\n",users[i].password);
 		printf("Status : %d\n",users[i].userStatus);
+		printf("No: %d\n",users[i].count);
 	}
 	printf("-----------------------------------------------------\n");
 }
@@ -207,7 +244,7 @@ void writeUserToFile(char filename[])
 		return; 
 	}else {
 		showUser();
-		for (i = 0; users[i].count != 0; i++ )
+		for (i = 0; users[i].count <= MAX_USER && users[i].count>0; i++ )
 		{
 			fprintf(f, "%s %s %d\n", users[i].id, users[i].password, users[i].userStatus);
 		}
@@ -233,6 +270,7 @@ int findUserById(char messAcgument[])
 int addUser(struct User user)
 {
 	if (userCount > MAX_USER) return 0;
+	//TRY: Thu MAX_USER>10
 	users[userCount++] = user;
 	return 1;
 }
@@ -277,6 +315,7 @@ int findSessByAddr(struct sockaddr_in cliAddr, int connd)
 int checkPass(char pass[]){
 	//Password has min_length is 5
 	int i;
+	printf("pass: %s_%d\n",pass,strlen(pass));
 	if (strlen(pass) < 5) return 0;
 	else return 1;
 }
@@ -306,7 +345,33 @@ int findSessSignByAddr(struct sockaddr_in cliAddr, int connd)
 	return -1;
 }
 
+char *initSession(struct sockaddr_in cliAddr, int connd){
+	int pos;
+	struct Session session;
+	struct User user;
+	
+	pos=findSessByAddr(cliAddr,connd);
+	if (pos==-1){
+		user = newUser(UNKNOWN, "", ACTIVE);
+		session = newSession(user, WAIT_FOR_REQUEST, cliAddr, connd);// create new session
+		addSession(session);
+		pos=findSessByAddr(cliAddr,connd);
+		printStatus("SINIT",pos);
+		return C_INIT_SUCESS;
+	}
+	printf("==>Init error!\n");
+	return "==>Init error!\n";
+}
+
 //to do diff
+
+//process while Code is ALERT
+char *alertCodeProcess(char messAcgument[],struct sockaddr_in cliAddr, int connd, int pos){
+	//found session
+	sess[pos].sessStatus = atoi(messAcgument);
+	printStatus("ALERT",pos);
+	return C_CHANGED_STATUS;
+}
 
 //process while Code is LOGIN
 char *userCodeProcess(struct sockaddr_in cliAddr, int connd, int pos, int i)
@@ -379,46 +444,45 @@ char *loutCodeProcess(char messAcgument[], int pos)
 //process while code is SIGNU
 char *siguCodeProcess(char messAcgument[],struct sockaddr_in cliAddr, int connd, int pos, int i)
 {
-	// printf("Vao 1\n");
     struct Session session;
 	struct User user;
+	if (userCount == MAX_USER) return C_MAX_USER; //If max user
 	if (i != -1) return C_SAME_USER; //if not found user
 	user = newUser(messAcgument, "", ACTIVE);
-	// printf("Vao 2\n");
-    
-	if (pos == -1) //if not found session
-	{
-		session = newSession(user, USERNAME_CREATED, cliAddr, connd);// create new session
-		addSessionSignup(session);                                   // add session
+	printf("%d)\n",sess[pos].sessStatus);
+	if (sess[pos].sessStatus == WAIT_FOR_USERNAME_SIGNUP) {//found user != user of session
+		sess[pos].sessStatus = WAIT_FOR_PASS;
+		memcpy(&(sess[pos].user), &user, sizeof(struct User));
+		printStatus("SIGNU",pos);
 		return C_NEW_USER;
 	}
-	//found session
-	else if (sessSignup[pos].sessStatus == START_SIGNUP || sessSignup[pos].sessStatus == USERNAME_CREATED) {//found user != user of session
-		sessSignup[pos].sessStatus = USERNAME_CREATED;
-		memcpy(&(sessSignup[pos].user), &user, sizeof(struct User));
-		return C_NEW_USER;
-	}
-	// printf("Vao 3\n");
-
-	return "Login Sequence Is Wrong";
+	return "Sequence Is Wrong";
 }
 
 
 //Process while Code is SIGNP
-char *sigpCodeProcess(char messAcgument[], int posSign)
+char *sigpCodeProcess(char messAcgument[], int pos)
 {
-	int i;
+	struct User user;
 	// printf("Vao 11\n");
 	if (checkPass(messAcgument)){
 
-		strcpy(sessSignup[posSign].user.password, messAcgument);
-		strcpy(sessSignup[posSign].capcha, makeCapcha());
-		// printf(".Vao 11 %s\n",sessSignup[posSign].capcha);
-		posCapchar = posSign;
-		sessSignup[posSign].sessStatus = PASSWORD_CREATED; //next status  
-		return C_CORRECT_PASS;
+		strcpy(sess[pos].user.password, messAcgument);
+		sess[pos].user.count = userCount+1;
+
+		// NOTE: Da chan truong hop max_user o signup process
+		if (addUser(sess[pos].user))
+		{
+			writeUserToFile(FILE_NAME);
+			sess[pos].sessStatus = WAIT_FOR_REQUEST;  //SIGNUP SUCESS //back to default status 
+			user = newUser(UNKNOWN, "", ACTIVE); //reset sess.user
+			memcpy(&(sess[pos].user), &user, sizeof(struct User));
+			printStatus("SIGNP",pos);
+			return C_CORRECT_PASS;
+		}
 	}
 	else return C_INCORRECT_PASS;
+	return "Sequence Is Wrong";
 }
 
 //Process while Code is SIGNC
@@ -441,15 +505,26 @@ char *sigcCodeProcess(char messAcgument[], int pos)
 char *process(char messCode[], char messAcgument[], struct sockaddr_in cliAddr, int connd )
 {
 	int pos,  posSign, i;
+
 	pos = findSessByAddr(cliAddr, connd); //find Session return -1 if session not exists
 	posSign = findSessSignByAddr(cliAddr, connd);
 
-	//test
-	printf("posSign: %d\n",posSign);
-	printf("posstatus: %d\n",sessSignup[posSign].sessStatus);
+	// //test
+	printf("\tSession pos: %d\n",pos);
+	printf("\tSession status: %d\n",sess[pos].sessStatus);
 
 	// checkListRoom(); //todo diff
 
+	/***********messcode is SINIT***********/ 
+	// Khoi tao status ben server
+	if (strcmp(messCode, SINIT) == 0 ){
+		return initSession(cliAddr,connd);
+	}
+	
+	/***********messcode is LOGIN***********/
+	if (strcmp(messCode, ALERT) == 0 ){
+		return alertCodeProcess(messAcgument,cliAddr,connd, pos);
+	}
 	/***********messcode is LOGIN***********/
 	if (strcmp(messCode, LOGIN) == 0 ){
 		// printSession(pos);
@@ -466,16 +541,16 @@ char *process(char messCode[], char messAcgument[], struct sockaddr_in cliAddr, 
 	}
     
     /********messcode is SIGNU*********/
-	if (strcmp(messCode, SIGNU) == 0 && pos == -1 )
+	if (strcmp(messCode, SIGNU) == 0)
 	{
         i = findUserById (messAcgument); //find user return -1 if user not exists
-		return siguCodeProcess(messAcgument, cliAddr,connd, posSign, i);
+		return siguCodeProcess(messAcgument, cliAddr,connd, pos, i);
 	}
 
 	/********messcode is SIGNP*********/
-	if (strcmp(messCode, SIGNP) == 0 && posSign != -1 && sessSignup[posSign].sessStatus == USERNAME_CREATED)
+	if (strcmp(messCode, SIGNP) == 0 && sess[pos].sessStatus == WAIT_FOR_PASS)
 	{
-		return sigpCodeProcess(messAcgument, posSign);
+		return sigpCodeProcess(messAcgument, pos);
 	}
 
 	/********messcode is SIGNC*********/
@@ -503,14 +578,14 @@ void changeFull(char message[])
 		strcat(message, " -> Password ok. Login successful!\n");
 		// to do diff. for more info
 	}
-	if (strcmp(message, C_CORRECT_PASS) == 0)
-	{
-		char capcha[6];
-		strcpy(capcha, sessSignup[posCapchar].capcha);
-		printf("cap:%s\n",capcha);
-		strcat(message, " -> Please enter capcha code : ");
-		strcat(message, capcha);
-	}
+	// if (strcmp(message, C_CORRECT_PASS) == 0)
+	// {
+	// 	char capcha[6];
+	// 	strcpy(capcha, sessSignup[posCapchar].capcha);
+	// 	printf("cap:%s\n",capcha);
+	// 	strcat(message, " -> Please enter capcha code : ");
+	// 	strcat(message, capcha);
+	// }
 }
 
 int main(int argc, char *argv[]) {
@@ -568,6 +643,8 @@ int main(int argc, char *argv[]) {
 						fds[newfd].revents = 0;
 						fdmax++;
 						printf("You got a connection from %s\n", inet_ntoa(client_addr.sin_addr));
+						// initSession(client_addr,fds[i].fd);
+						// printf("%d_done\n",fds[i].fd);
 					}
 				} 
 				else if(fds[i].revents & POLLIN){
@@ -585,9 +662,12 @@ int main(int argc, char *argv[]) {
 
 						if (isValidMessage (buff, messCode, messAcgument))
 						{
-							printf("messCode:%s\nmessAcgument:%s\n",messCode, messAcgument );
+							printf("-----------------------------------------------------------\n");
+							printf("RUNNING\n\tmessCode:%s\n\tmessAcgument:%s\n",messCode, messAcgument );
+
 							strcpy(message, process(messCode, messAcgument, client_addr, fds[i].fd));
-							printf("%s\n",message);
+
+							printf("\t\t==>Return to client: %s\n",message);
 							changeFull(message);
 						}else{
 							strcpy(message, "Syntax Error!");
