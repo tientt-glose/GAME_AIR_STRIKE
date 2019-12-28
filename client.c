@@ -8,6 +8,7 @@
 #include <unistd.h>
 
 #define BUFF_SIZE 8192
+#define FILE_NAME "account.txt"
 #define C_CHANGED_STATUS "99"
 #define C_INIT_SUCESS "100"
 
@@ -20,31 +21,52 @@
 #define C_CORRECT_PASS "120"
 #define C_INCORRECT_PASS "121"
 
-#define C_FOUND_ID "00"
-#define C_NOT_FOUND_ID "01"
-#define C_FOUND_PASSWORD "10"
-#define C_NOT_FOUND_PASSWORD "11"
+// Login Return
+// SS: WAIT_FOR_USERNAME_LOGIN 21
+#define C_FOUND_ID "210"
+#define C_NOT_FOUND_ID "211"
+// SS: WAIT_FOR_PASS_LOGIN 22
+#define C_FOUND_PASSWORD "220"
+#define C_NOT_FOUND_PASSWORD "221"
+
 #define C_LOGOUT_OK "20"
 #define C_LOGOUT_FAILS "21"
 #define C_BLOCK "31"
-
 
 #define C_CORRECT_CODE "60"
 #define C_INCORRECT_CODE "61"
 
 //client
 #define MENU 0
+#define MENU_LOGGED 3
+#define EXIT 'q' //Phai la dau nhay don de so sanh ky tu
 #define SIGNUP_ING 11
 #define SIGNUP_USERNAME_TYPED 12
+#define LOGIN_ING 21
+#define LOGIN_USERNAME_TYPED 22
 
 //send to server
 #define IN_MENU "0"
 #define SIGNUP_REQUEST "11"
+#define LOGIN_REQUEST "21"
+
+
 //status of server
 
 #define BLOCKED 0
 #define ACTIVE 1
 #define MAX 100
+
+#define MAX_USER 10
+struct User
+{
+	char id[30];
+	char password[30];
+	int userStatus;
+	int count;
+};
+
+struct User users[MAX_USER];
 
 int request(int client_sock, char message[])
 {
@@ -104,6 +126,34 @@ void generateNormalPackage(char mess[], char messCode[], char buff[])
 	}
 }
 
+//read file and save to struct User
+// void readFileUser(char filename[])
+// {
+// 	FILE *f = fopen(filename, "r");
+// 	userCount = 0;
+// 	int i = 0;
+// 	char id[30], password[30], userStatus[2];
+// 	struct User user;
+// 	if (f == NULL)
+// 	{
+// 		printf("Can't open file %s!\n", filename);
+// 		return;
+// 	}
+// 	else
+// 	{
+// 		while (!feof(f))
+// 		{
+// 			fscanf(f, "%s %s %s\n", id, password, userStatus);
+// 			user = newUser(id, password, atoi(userStatus));
+// 			users[i] = user;
+// 			users[i].count = i + 1; //luu STT
+// 			userCount++;
+// 			i++;
+// 		}
+// 	}
+// 	fclose(f);
+// }
+
 char *makeFull(char respond[])
 {
 	if (strcmp(respond, C_CHANGED_STATUS) == 0)
@@ -129,6 +179,10 @@ char *makeFull(char respond[])
 	if (strcmp(respond, C_NOT_FOUND_ID) == 0)
 	{
 		return "User incorrect, try again";
+	}
+	if (strcmp(respond, C_FOUND_PASSWORD) == 0)
+	{
+		return "Password ok. Login successful!";
 	}
 	if (strcmp(respond, C_NOT_FOUND_PASSWORD) == 0)
 	{
@@ -168,6 +222,8 @@ char *makeFull(char respond[])
 	}
 }
 int status;
+int userCount = 0;
+char user_name[BUFF_SIZE + 1]; //temp for everything
 int main(int argc, char const *argv[])
 {
 	int SERVER_PORT;
@@ -199,114 +255,135 @@ int main(int argc, char const *argv[])
 	}
 	status = MENU;
 	generateNormalPackage(mess, "SINIT", IN_MENU);
-	printf("%s|\n", mess);
 	requestAndReceive(client_sock, mess, respond);
 	printf("\nRespond from server:\n%s\n", makeFull(respond));
 	while (1)
 	{
-		// if (strcmp(status, MENU) == 0)
-		// {
-		// 	printf("Welcome!")
-		// }
-		printf("Welcome! \n 1. Sign up \n 2. Sign in\n");
-		printf("\nEnter your request:");
-		scanf("%d%*c", &op);
-		switch (op)
+		switch (status)
 		{
-		case 1: 
-			status = SIGNUP_ING;
-			generateNormalPackage(mess, "ALERT", SIGNUP_REQUEST);
-			requestAndReceive(client_sock, mess, respond);
-			printf("\nRespond from server:\n%s\n", makeFull(respond));
-
-			if (strcmp(respond, C_MAX_USER) == 0) status=MENU;
-			
-			
-			while (status!=MENU)
+		case MENU:
+			printf("\nWelcome! \n 1. Sign up \n 2. Log in\n");
+			printf("\nEnter your request:");
+			scanf("%d%*c", &op);
+			switch (op)
 			{
-				switch (status)
-				{
-				case SIGNUP_ING:
-					head = "SIGNU";
-					title = "Enter your user name (no space)";
-					break;
-				
-				case SIGNUP_USERNAME_TYPED:
-					head = "SIGNP";
-					title = "Enter your pass (no space)";
-					break;
-
-				default:
-					break;
-				}
-				input(title, buff);
-				generateNormalPackage(mess, head, buff);
+			case 1:
+				status = SIGNUP_ING;
+				generateNormalPackage(mess, "ALERT", SIGNUP_REQUEST);
 				requestAndReceive(client_sock, mess, respond);
-				if (strcmp(respond, C_NEW_USER) == 0 && status == SIGNUP_ING)
-				{
-					status = SIGNUP_USERNAME_TYPED;
-				} 
-				else if (strcmp(respond, C_MAX_USER) == 0 && status == SIGNUP_ING) {
-					// printf("|%s||%s|\n",respond,C_CORRECT_PASS);
-					status = MENU;
-				}
-				else if (strcmp(respond, C_CORRECT_PASS) == 0 && status == SIGNUP_USERNAME_TYPED) {
-					// printf("|%s||%s|\n",respond,C_CORRECT_PASS);
-					status = MENU;
-				}
 				printf("\nRespond from server:\n%s\n", makeFull(respond));
 
-				printf("Status: %d\n",status);
+				if (strcmp(respond, C_MAX_USER) == 0)
+					status = MENU;
+
+				while (status != MENU)
+				{
+					switch (status)
+					{
+					case SIGNUP_ING:
+						head = "SIGNU";
+						title = "Enter your user name (no space, q for exit)";
+						break;
+
+					case SIGNUP_USERNAME_TYPED:
+						head = "SIGNP";
+						title = "Enter your pass (no space, q for exit)";
+						break;
+
+					default:
+						break;
+					}
+					input(title, buff);
+					// For q reset status
+					if (buff[0] == EXIT && strlen(buff) == 2)
+					{
+						generateNormalPackage(mess, "RESET", IN_MENU);
+						requestAndReceive(client_sock, mess, respond);
+						status = MENU;
+						break;
+					}
+					generateNormalPackage(mess, head, buff);
+					requestAndReceive(client_sock, mess, respond);
+					if (strcmp(respond, C_NEW_USER) == 0 && status == SIGNUP_ING)
+					{
+						status = SIGNUP_USERNAME_TYPED;
+					}
+					else if (strcmp(respond, C_MAX_USER) == 0 && status == SIGNUP_ING)
+					{
+						status = MENU;
+					}
+					else if (strcmp(respond, C_CORRECT_PASS) == 0 && status == SIGNUP_USERNAME_TYPED)
+					{
+						status = MENU;
+					}
+					printf("\nRespond from server:\n%s\n", makeFull(respond));
+
+					printf("Status: %d\n", status);
+				}
+				break;
+
+			case 2:
+				status = LOGIN_ING;
+				generateNormalPackage(mess, "ALERT", LOGIN_REQUEST);
+				requestAndReceive(client_sock, mess, respond);
+				printf("\nRespond from server:\n%s\n", makeFull(respond));
+
+				while (status != MENU_LOGGED)
+				{
+					switch (status)
+					{
+					case LOGIN_ING:
+						head = "LOGIN";
+						title = "Enter your user name (no space)";
+						break;
+
+					case LOGIN_USERNAME_TYPED:
+						head = "UPASS";
+						title = "Enter your password (no space)";
+						break;
+
+					default:
+						break;
+					}
+					input(title, buff);
+					//For q reset status
+					if (buff[0] == EXIT && strlen(buff) == 2)
+					{
+						generateNormalPackage(mess, "RESET", IN_MENU);
+						requestAndReceive(client_sock, mess, respond);
+						status = MENU;
+						break;
+					}
+					generateNormalPackage(mess, head, buff);
+					requestAndReceive(client_sock, mess, respond);
+					printf("\nRespond from server:\n%s\n", makeFull(respond));
+
+					if (strcmp(respond, C_FOUND_ID) == 0 && status == LOGIN_ING)
+					{
+						status = LOGIN_USERNAME_TYPED;
+						strncpy(user_name,buff,strlen(buff)-1);
+					}
+					else if (strcmp(respond, C_FOUND_PASSWORD) == 0 && status == LOGIN_USERNAME_TYPED)
+					{
+						status = MENU_LOGGED; //chuyen cach in menu
+					}
+				}
+
+				break;
+
+			default:
+				break;
 			}
+			break;
 
-			// input("Enter your user name (no space)", buff);
-			// generateNormalPackage(mess, "SIGNU", buff);
-			// printf("|%s|\n", mess);
-			// requestAndReceive(client_sock, mess, respond);
-			// printf("\nRespond from server:\n%s\n", makeFull(respond));
-
-			// input("Enter your pass (no space)", buff);
-			// generateNormalPackage(mess, "SIGNP", buff);
-			// requestAndReceive(client_sock, mess, respond);
-			// printf("\nRespond from server:\n%s\n", makeFull(respond));
-
-			// input("Enter your capchacapcha (no space)", buff);
-			// generateNormalPackage(mess, "SIGNC", buff);
-			// requestAndReceive(client_sock, mess, respond);
-			// printf("\nRespond from server:\n%s\n", makeFull(respond));
-
+		case MENU_LOGGED:
+			printf("\nWelcome %s! \n 1. Create Room \n 2. Enter Room\n 3. Logout \n",user_name);
+			printf("\nEnter your request:");
+			scanf("%d%*c", &op);
 			break;
 
 		default:
 			break;
-		}
-
-		printf("\nEnter your request:");
-		memset(buff, '\0', (strlen(buff) + 1));
-		fgets(buff, BUFF_SIZE, stdin);
-		msg_len = strlen(buff);
-		if (msg_len == 1)
-			break;
-
-		//send message
-		if (!request(client_sock, buff))
-		{
-			printf("message send fails\n");
-		}
-		else
-		{
-			printf("\n-----------------------------------------------\n");
-		}
-
-		if (!receive(client_sock, respond))
-		{
-			printf("message receive fails\n");
-		}
-		else
-		{
-			printf("\nRespond from server:\n%s\n", makeFull(respond));
-			printf("\n-----------------------------------------------\n");
-			//To do diff
 		}
 	}
 	close(client_sock);
