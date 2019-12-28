@@ -213,13 +213,16 @@ int main(int argc, char const *argv[])
 		scanf("%d%*c", &op);
 		switch (op)
 		{
-		case 1:
+		case 1: 
 			status = SIGNUP_ING;
 			generateNormalPackage(mess, "ALERT", SIGNUP_REQUEST);
 			requestAndReceive(client_sock, mess, respond);
 			printf("\nRespond from server:\n%s\n", makeFull(respond));
 
-			do
+			if (strcmp(respond, C_MAX_USER) == 0) status=MENU;
+			
+			
+			while (status!=MENU)
 			{
 				switch (status)
 				{
@@ -252,8 +255,9 @@ int main(int argc, char const *argv[])
 					status = MENU;
 				}
 				printf("\nRespond from server:\n%s\n", makeFull(respond));
+
 				printf("Status: %d\n",status);
-			} while (status != MENU);
+			}
 
 			// input("Enter your user name (no space)", buff);
 			// generateNormalPackage(mess, "SIGNU", buff);
