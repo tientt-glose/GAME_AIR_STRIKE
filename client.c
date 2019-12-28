@@ -29,14 +29,17 @@
 #define C_FOUND_PASSWORD "220"
 #define C_NOT_FOUND_PASSWORD "221"
 
-#define C_LOGOUT_OK "20"
-#define C_LOGOUT_FAILS "21"
-#define C_BLOCK "31"
+// Logout Return
+// SS: WAIT_FOR_USERNAME_LOGOUT 41
+#define C_LOGOUT_OK "410"
+#define C_LOGOUT_FAILS "411"
 
+// Unuse
+#define C_BLOCK "31"
 #define C_CORRECT_CODE "60"
 #define C_INCORRECT_CODE "61"
 
-//client
+// Client Status
 #define MENU 0
 #define MENU_LOGGED 3
 #define EXIT 'q' //Phai la dau nhay don de so sanh ky tu
@@ -44,20 +47,19 @@
 #define SIGNUP_USERNAME_TYPED 12
 #define LOGIN_ING 21
 #define LOGIN_USERNAME_TYPED 22
+#define LOGOUT_ING 41
 
-//send to server
+//	Send to server for change status
 #define IN_MENU "0"
 #define SIGNUP_REQUEST "11"
 #define LOGIN_REQUEST "21"
-
-
-//status of server
+#define LOGOUT_REQUEST "41"
 
 #define BLOCKED 0
 #define ACTIVE 1
 #define MAX 100
-
 #define MAX_USER 10
+
 struct User
 {
 	char id[30];
@@ -361,7 +363,7 @@ int main(int argc, char const *argv[])
 					if (strcmp(respond, C_FOUND_ID) == 0 && status == LOGIN_ING)
 					{
 						status = LOGIN_USERNAME_TYPED;
-						strncpy(user_name,buff,strlen(buff)-1);
+						strncpy(user_name, buff, strlen(buff) - 1);
 					}
 					else if (strcmp(respond, C_FOUND_PASSWORD) == 0 && status == LOGIN_USERNAME_TYPED)
 					{
@@ -377,9 +379,44 @@ int main(int argc, char const *argv[])
 			break;
 
 		case MENU_LOGGED:
-			printf("\nWelcome %s! \n 1. Create Room \n 2. Enter Room\n 3. Logout \n",user_name);
+			printf("\nWelcome %s! \n 1. Create Room \n 2. Enter Room\n 3. Logout \n", user_name);
 			printf("\nEnter your request:");
 			scanf("%d%*c", &op);
+			switch (op)
+			{
+			case 3:
+				status = LOGOUT_ING;
+				generateNormalPackage(mess, "ALERT", LOGOUT_REQUEST);
+				requestAndReceive(client_sock, mess, respond);
+				printf("\nRespond from server:\n%s\n", makeFull(respond));
+				while (status != MENU)
+				{
+					switch (status)
+					{
+					case LOGOUT_ING:
+						head = "LOGOU";
+						strcpy(buff, user_name);
+						strcat(buff, "\n");
+						break;
+
+					default:
+						break;
+					}
+					generateNormalPackage(mess, head, buff);
+					requestAndReceive(client_sock, mess, respond);
+					printf("\nRespond from server:\n%s\n", makeFull(respond));
+
+					if (strcmp(respond, C_LOGOUT_OK) == 0 && status == LOGOUT_ING)
+					{
+						status = MENU;
+					}
+				}
+
+				break;
+
+			default:
+				break;
+			}
 			break;
 
 		default:

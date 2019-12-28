@@ -44,12 +44,21 @@
 #define C_FOUND_PASSWORD "220"
 #define C_NOT_FOUND_PASSWORD "221"
 
-#define C_LOGOUT_OK "20"
-#define C_LOGOUT_FAILS "21"
-#define C_BLOCK "31"
+// Logout Return
+// SS: WAIT_FOR_USERNAME_LOGOUT 41
+#define C_LOGOUT_OK "410"
+#define C_LOGOUT_FAILS "411"
 
+// Unuse
+#define C_BLOCK "31"
 #define C_CORRECT_CODE "60"
 #define C_INCORRECT_CODE "61"
+#define PASSWORD_CREATED 6
+#define SIGNUP_SUCCESSFUL 7
+#define NOT_IDENTIFIED_USER 1
+#define NOT_AUTHENTICATED 2
+#define AUTHENTICATED 3
+#define START_SIGNUP 4
 
 // Status cua server
 #define WAIT_FOR_REQUEST 0
@@ -57,14 +66,7 @@
 #define WAIT_FOR_PASS_SIGNUP 12
 #define WAIT_FOR_USERNAME_LOGIN 21
 #define WAIT_FOR_PASS_LOGIN 22
-
-#define NOT_IDENTIFIED_USER 1
-#define NOT_AUTHENTICATED 2
-#define AUTHENTICATED 3
-#define START_SIGNUP 4
-
-#define PASSWORD_CREATED 6
-#define SIGNUP_SUCCESSFUL 7
+#define WAIT_FOR_USERNAME_LOGOUT 41
 
 // Status isLogin cua session
 #define USER_NOT_LOGIN 0
@@ -74,6 +76,7 @@
 #define ACTIVE 1
 #define WAIT 0
 #define PLAY 1
+
 #define MAX_NUMBER_LOGIN 10
 #define MAX_USER 10
 #define MAX_ROOM 10
@@ -482,11 +485,17 @@ char *loutCodeProcess(char messAcgument[], int pos)
 {
 	if (strcmp(sess[pos].user.id, messAcgument) == 0) //check userId is valid?
 	{
-		sess[pos].sessStatus = NOT_IDENTIFIED_USER; //reset session status
+		struct User user;
+		sess[pos].sessStatus = WAIT_FOR_REQUEST;
+		sess[pos].isLogin = USER_NOT_LOGIN;
+		user = newUser(UNKNOWN, "", ACTIVE);
+		memcpy(&(sess[pos].user), &user, sizeof(struct User));
+		printStatus(LOGOU,pos);
 		return C_LOGOUT_OK;
 	}
 	else
 		return C_LOGOUT_FAILS;
+	return "Sequence Is Wrong";
 }
 
 //process while code is SIGNU
@@ -616,20 +625,20 @@ char *process(char messCode[], char messAcgument[], struct sockaddr_in cliAddr, 
 		return sigpCodeProcess(messAcgument, pos);
 	}
 
-	/********messcode is SIGNC*********/
-	if (strcmp(messCode, SIGNC) == 0 && posSign != -1 && sessSignup[posSign].sessStatus == PASSWORD_CREATED)
-	{
-		return sigcCodeProcess(messAcgument, posSign);
-	}
+	// /********messcode is SIGNC*********/
+	// if (strcmp(messCode, SIGNC) == 0 && posSign != -1 && sessSignup[posSign].sessStatus == PASSWORD_CREATED)
+	// {
+	// 	return sigcCodeProcess(messAcgument, posSign);
+	// }
 
 	/********messcode is LOGOU*********/
-	if (strcmp(messCode, LOGOU) == 0 && pos != -1 && sess[pos].sessStatus == AUTHENTICATED)
+	if (strcmp(messCode, LOGOU) == 0 && sess[pos].sessStatus == WAIT_FOR_USERNAME_LOGOUT)
 	{
 		return loutCodeProcess(messAcgument, pos);
 	}
 	else
 	{
-		return "Login Sequence Is Wrong";
+		return "Process Sequence Is Wrong";
 	}
 }
 
