@@ -22,10 +22,21 @@
 #define SIGNU "SIGNU"
 #define SIGNP "SIGNP"
 #define SIGNC "SIGNC"
+#define CROOM "CROOM"
+#define SROOM "SROOM"
+#define UJOIN "UJOIN"
+#define GINFO "GINFO"
+#define RINFO "RINFO"
+#define LEAVE "LEAVE"
 
 // Message tra ve client
 #define C_CHANGED_STATUS "99"
 #define C_INIT_SUCESS "100"
+
+// Notification
+#define C_NO_INFO "404"
+#define C_USER_JOIN "714"
+#define C_USER_LEAVE "912"
 
 // Signup
 // SS: WAIT_FOR_USERNAME_SIGNUP 11
@@ -40,6 +51,7 @@
 // SS: WAIT_FOR_USERNAME_LOGIN 21
 #define C_FOUND_ID "210"
 #define C_NOT_FOUND_ID "211"
+#define C_IS_LOGIN "212"
 // SS: WAIT_FOR_PASS_LOGIN 22
 #define C_FOUND_PASSWORD "220"
 #define C_NOT_FOUND_PASSWORD "221"
@@ -48,6 +60,27 @@
 // SS: WAIT_FOR_USERNAME_LOGOUT 41
 #define C_LOGOUT_OK "410"
 #define C_LOGOUT_FAILS "411"
+
+// Creat Room Return
+// SS: WAIT_FOR_RNAME_CREATE_ROOM 51
+#define C_CRE_ROOM_SUC "510"
+#define C_CRE_ROOM_FAI "511"
+
+// See Room Return
+// SS: WAIT_FOR_SEE_ROOM 61
+#define C_SEE_ROOM_RESULT "610"
+
+// Join Room Return
+// SS: WAIT_FOR_RNAME_JOIN_ROOM 71
+#define C_IN_ROOM "710"
+#define C_NON_EXIST_ROOM "711"
+#define C_PLAYING_ROOM "712"
+#define C_MAX_USER_IN_ROOM "713"
+
+// Leave Room Return
+// SS: WAIT_FOR_LEAVE_ROOM 91
+#define C_LEAV_ROOM_FAI "910"
+#define C_LEAV_ROOM_SUC "911"
 
 // Unuse
 #define C_BLOCK "31"
@@ -60,6 +93,10 @@
 #define AUTHENTICATED 3
 #define START_SIGNUP 4
 
+// Status cua client
+#define IN_MENU "0" //Phuc vu cho viec reset khi ng dung bam "q". Co su khac nhau giua 2 menu
+#define IN_MENU_LOGGED "3"
+
 // Status cua server
 #define WAIT_FOR_REQUEST 0
 #define WAIT_FOR_USERNAME_SIGNUP 11
@@ -67,6 +104,10 @@
 #define WAIT_FOR_USERNAME_LOGIN 21
 #define WAIT_FOR_PASS_LOGIN 22
 #define WAIT_FOR_USERNAME_LOGOUT 41
+#define WAIT_FOR_RNAME_CREATE_ROOM 51
+#define WAIT_FOR_SEE_ROOM 61
+#define WAIT_FOR_RNAME_JOIN_ROOM 71
+#define WAIT_FOR_LEAVE_ROOM 91
 
 // Status isLogin cua session
 #define USER_NOT_LOGIN 0
@@ -79,10 +120,14 @@
 
 #define MAX_NUMBER_LOGIN 10
 #define MAX_USER 10
+#define MAX_USER_IN_ROOM 2
 #define MAX_ROOM 10
 // To do diff
 #define MAX_SESSION 100
 #define FILE_NAME "account.txt"
+
+// DOTO: Khai Bao toan bo ham
+void changeFull(char message[], struct sockaddr_in cliAddr, int connd);
 
 //To do diff
 
@@ -95,7 +140,42 @@ struct User
 };
 
 struct User users[MAX_USER];
-struct User userSigns[MAX_USER];
+
+// NGUYEN: Dinh nghia kieu du lieu game
+// typedef struct question
+// {
+// 	int id;
+// 	int level; //1 : easy, 2 : medium, 3 : hard
+// 	char content[100];
+// 	char choiceA[50];
+// 	char choiceB[50];
+// 	char choiceC[50];
+// 	char choiceD[50];
+// 	char answer;
+// 	int quesStatus; //da co nguoi tra loi nhanh nhat chua?
+// } Question;
+
+struct Noti
+{
+	char messToUser[BUFF_SIZE];
+};
+
+struct Room
+{
+	int id;
+	char name[BUFF_SIZE];
+	struct User users[MAX_USER_IN_ROOM];
+	int connd[MAX_USER_IN_ROOM];
+	int countUser;
+	struct Noti noti[MAX_USER_IN_ROOM];
+	// NGUYEN: khai bao kieu du lieu game o day
+	// Question questions[MAX_QUESTION];
+	// int countQues;
+	int roomStatus;
+};
+
+struct Room rooms[MAX_ROOM];
+int countRoom = 0;
 
 struct Session
 {
@@ -104,19 +184,18 @@ struct Session
 	int isLogin;
 	int countLogin;
 	int connd;
-	char capcha[6];
+	char capcha[6]; //REFRACTOR: Bo capcha
 	struct sockaddr_in cliAddr;
-	// struct Room room; //to do diff
+	struct Room *room;
 };
-
 struct Session sess[MAX_SESSION];
 
-struct Session sessSignup[MAX_SESSION];
+struct Session sessSignup[MAX_SESSION]; //REFRACTOR: Bo sessSIgnup
 
 int sessCount = 0;
 int userCount = 0;
-int sessSignCount = 0;
-int posCapchar;
+int sessSignCount = 0; //REFRACTOR: Bo capcha
+int posCapchar;		   //REFRACTOR: Bo capcha
 
 //user constructor
 struct User newUser(char id[], char password[], int userStatus)
@@ -139,11 +218,74 @@ struct Session newSession(struct User user, int sessStatus, struct sockaddr_in c
 	session.cliAddr = cliAddr;
 	session.countLogin = 0;
 	session.connd = connd;
+	session.room = NULL;
 	return session;
 }
 
-// To do diff
+//room constructor
+// struct Room newRoom(char room_name[], int connd, struct User user)
+// {
+// 	int i;
+// 	struct Room room;
+// 	// REFRACTOR
+// 	for (i = 0; i < countRoom; ++i)
+// 	{
+// 		if (strcmp(rooms[i].name, room_name) == 0)
+// 		{
+// 			return rooms[i];
+// 		}
+// 	}
+// 	rooms[countRoom].id = countRoom + 1;
+// 	strcpy(rooms[countRoom].name, room_name);
+// 	rooms[countRoom].users[0] = user;
+// 	rooms[countRoom].countUser = 1;
+// 	rooms[countRoom].connd[0] = connd;
+// 	// NGUYEN:
+// 	// rooms[countRoom].countQues = 0;
+// 	rooms[countRoom].roomStatus = WAIT; //DOTO
+// 	countRoom++;
+// 	return rooms[countRoom - 1];
+// }
 
+int newRoom(char room_name[], int connd, struct User user)
+{
+	int i;
+	struct Room room;
+	// REFRACTOR
+	for (i = 0; i < countRoom; ++i)
+	{
+		if (strcmp(rooms[i].name, room_name) == 0)
+		{
+			return i;
+		}
+	}
+	rooms[countRoom].id = countRoom + 1;
+	strcpy(rooms[countRoom].name, room_name);
+	rooms[countRoom].users[0] = user;
+	rooms[countRoom].countUser = 1;
+	rooms[countRoom].connd[0] = connd;
+	strcpy(rooms[countRoom].noti[0].messToUser, C_NO_INFO);
+	// NGUYEN:
+	// rooms[countRoom].countQues = 0;
+	rooms[countRoom].roomStatus = WAIT; //DOTO
+	countRoom++;
+	return countRoom - 1;
+}
+
+// to do diff
+
+//
+void printRoom(struct Room room)
+{
+	printf("\tRoom id :%d\n", room.id);
+	printf("\tRoom name :%s\n", room.name);
+	printf("\tRoom countUser :%d\n", room.countUser);
+	// NGUYEN
+	// printf("room countQues :%d\n",room.countQues );
+	printf("\tRoom status :%d\n", room.roomStatus);
+}
+
+//REFRACTOR
 void printSession(int pos)
 {
 	if (pos <= 0)
@@ -162,6 +304,10 @@ void printStatus(char when[], int pos)
 	printf("\tSession status: %d\n", sess[pos].sessStatus);
 	printf("\tSession is login: %d\n", sess[pos].isLogin);
 	printf("\tSession user: %s\n", sess[pos].user.id);
+	printf("\tSession cond: %d\n", sess[pos].connd);
+
+	if (sess[pos].room != NULL)
+		printRoom(*sess[pos].room);
 }
 
 // To do diff
@@ -184,8 +330,20 @@ int isValidMessage(char message[], char messCode[], char messAcgument[])
 			return 0;
 	}
 	messAcgument[j] = '\0';
-	// printf("|%s|_|%s|\n",messCode,messAcgument);
 	return 1;
+}
+
+int isLogin(char messAcgument[])
+{
+	int i = 0;
+	for (i = 0; i < sessCount; i++)
+	{
+		if (strcmp(sess[i].user.id, messAcgument) == 0)
+		{
+			return i;
+		}
+	}
+	return -1; //chua login
 }
 
 int receive(int conn_sock, char message[])
@@ -290,29 +448,57 @@ int findUserById(char messAcgument[])
 	return -1;
 }
 
+//find user in sess.room (room in session) - return pos of user in room structure
+int findUserInSessRoom(char messAcgument[], int pos)
+{
+	int i = 0;
+	for (i = 0; i < MAX_USER_IN_ROOM; i++)
+	{
+		if (strcmp(sess[pos].room->users[i].id, messAcgument) == 0)
+		{
+			return i;
+		}
+	}
+	return -1;
+}
+
+//find other user in sess.room (room in session) BY seft-user name - return pos of other user in room structure
+int findOtherUserInSessRoom(char messAcgument[], int pos)
+{
+	int i = 0;
+	for (i = 0; i < MAX_USER_IN_ROOM; i++)
+	{
+		if (strcmp(sess[pos].room->users[i].id, messAcgument) != 0)
+		{
+			return i;
+		}
+	}
+	return -1;
+}
+
 //add a new session
 int addUser(struct User user)
 {
 	if (userCount > MAX_USER)
 		return 0;
-	//TRY: Thu MAX_USER>10
+	// TRY: Thu MAX_USER>10
 	users[userCount++] = user;
 	return 1;
 }
 
-//add a new session  // to do: check sess max
+//add a new session  // DOTO: check sess max
 int addSession(struct Session session)
 {
 	sess[sessCount++] = session;
 }
 
-//add a new session signup // to do: check sess max
+//add a new session signup // REFRACTOR
 int addSessionSignup(struct Session session)
 {
 	sessSignup[sessSignCount++] = session;
 }
 
-//remove session  // need refine
+//remove session  // REFRACTOR
 int removeSession(int k)
 {
 	int i;
@@ -328,7 +514,33 @@ int findSessByAddr(struct sockaddr_in cliAddr, int connd)
 	int i = 0;
 	for (i = 0; i < sessCount; i++)
 	{
-		if (memcmp(&(sess[i].cliAddr), &cliAddr, sizeof(struct sockaddr_in)) == 0 && sess[i].connd == connd)
+		// printf("\t_Session pos: %d\n", connd);
+		// printf("\t_You got a connection from %s\n", inet_ntoa(cliAddr.sin_addr));
+		// printf("\t__Session pos: %d\n", sess[i].connd);
+		// printf("\t__You got a connection from %s\n",  inet_ntoa(sess[i].cliAddr.sin_addr));
+
+		// if (memcmp(&(sess[i].cliAddr), &cliAddr, sizeof(struct sockaddr_in)) == 0) {
+		// 	printf("%d_ok\n",i);
+		// }
+
+		// if (memcmp(&(sess[i].cliAddr), &cliAddr, sizeof(struct sockaddr_in)) == 0 && sess[i].connd == connd)
+		if (sess[i].connd == connd)
+		{
+			// printf("\t__Session pos: %d\n", sess[i].connd);
+
+			return i;
+		}
+	}
+	return -1;
+}
+
+// REFRACTOR find room by id, return room position
+int findRoomById(int id)
+{
+	int i;
+	for (i = 0; i < countRoom; i++)
+	{
+		if (rooms[i].id == id)
 		{
 			return i;
 		}
@@ -336,7 +548,43 @@ int findSessByAddr(struct sockaddr_in cliAddr, int connd)
 	return -1;
 }
 
-//todo diff
+//find room by name, return room position
+int findRoomByName(char name[])
+{
+	int i;
+	for (i = 0; i < countRoom; i++)
+	{
+		if (strcmp(rooms[i].name, name) == 0)
+		{
+			return i;
+		}
+	}
+	return -1;
+}
+
+//remove room
+void removeRoom(int k)
+{
+	int i;
+	for (i = k; i < countRoom; ++i)
+	{
+		rooms[k] = rooms[k + 1];
+	}
+	countRoom--;
+}
+
+// REFRACTOR Xoa cac room ko co nguoi.
+void checkListRoom()
+{
+	for (int i = 0; i < countRoom; ++i)
+	{
+		if (rooms[i].countUser <= 0)
+		{
+			printf("remove room:%d\n", i);
+			removeRoom(i);
+		}
+	}
+}
 
 int checkPass(char pass[])
 {
@@ -377,6 +625,54 @@ int findSessSignByAddr(struct sockaddr_in cliAddr, int connd)
 	return -1;
 }
 
+void getListRoom(char message[])
+{
+	strcat(message, "List room :");
+	for (int i = 0; i < countRoom; ++i)
+	{
+		strcat(message, "\nRoom id :");
+		char str[10];
+		sprintf(str, "%d", rooms[i].id);
+		strcat(message, str);
+		strcat(message, "\tPeople count : ");
+		sprintf(str, "%d", rooms[i].countUser);
+		strcat(message, str);
+		strcat(message, " Choose the room or create new room?\n");
+	}
+}
+
+void getListRoomToken(char message[])
+{
+	char str[10];
+	strcat(message, "_");
+	sprintf(str, "%d", countRoom);
+	strcat(message, str);
+	for (int i = 0; i < countRoom; ++i)
+	{
+		// strcat(message, "\nRoom id :");
+		strcat(message, "_");
+		strcat(message, rooms[i].name);
+		// sprintf(str, "%d",rooms[i].id);
+		// strcat(message,str);
+		strcat(message, "_");
+		sprintf(str, "%d", rooms[i].countUser);
+		strcat(message, str);
+		strcat(message, "_");
+		sprintf(str, "%d", rooms[i].roomStatus);
+		strcat(message, str);
+	}
+}
+
+void kickUser(int posRoom, int posUserInRoom)
+{
+	for (int i = posUserInRoom; i < rooms[posRoom].countUser; ++i)
+	{
+		rooms[posRoom].users[i] = rooms[posRoom].users[i + 1];
+		rooms[posRoom].connd[i] = rooms[posRoom].connd[i + 1];
+	}
+	rooms[posRoom].countUser--;
+}
+
 char *initSession(struct sockaddr_in cliAddr, int connd)
 {
 	int pos;
@@ -384,6 +680,7 @@ char *initSession(struct sockaddr_in cliAddr, int connd)
 	struct User user;
 
 	pos = findSessByAddr(cliAddr, connd);
+	// pos = -1;
 	if (pos == -1)
 	{
 		user = newUser(UNKNOWN, "", ACTIVE);
@@ -396,8 +693,6 @@ char *initSession(struct sockaddr_in cliAddr, int connd)
 	printf("==>Init error!\n");
 	return "==>Init error!\n";
 }
-
-//to do diff
 
 //process while Code is ALERT
 char *alertCodeProcess(char messAcgument[], struct sockaddr_in cliAddr, int connd, int pos)
@@ -413,13 +708,16 @@ char *alertCodeProcess(char messAcgument[], struct sockaddr_in cliAddr, int conn
 }
 
 //process while Code is RESET
-char *resetCodeProcess(struct sockaddr_in cliAddr,int connd,int pos)
+char *resetCodeProcess(char messAcgument[], struct sockaddr_in cliAddr, int connd, int pos)
 {
 	struct User user;
 	sess[pos].sessStatus = WAIT_FOR_REQUEST;
-	user = newUser(UNKNOWN, "", ACTIVE);
-	memcpy(&(sess[pos].user), &user, sizeof(struct User));
-	printStatus(RESET,pos);
+	if (strcmp(messAcgument, IN_MENU) == 0)
+	{
+		user = newUser(UNKNOWN, "", ACTIVE);
+		memcpy(&(sess[pos].user), &user, sizeof(struct User));
+	}
+	printStatus(RESET, pos);
 	return C_CHANGED_STATUS;
 }
 
@@ -431,6 +729,8 @@ char *userCodeProcess(struct sockaddr_in cliAddr, int connd, int pos, int i)
 		return C_NOT_FOUND_ID; //if not found user
 	// if (users[i].userStatus == BLOCKED)	return C_BLOCK; //OPTIONAL: if found user but user blocked
 	//found session
+	if (isLogin(users[i].id) != -1)
+		return C_IS_LOGIN;
 	if (sess[pos].sessStatus == WAIT_FOR_USERNAME_LOGIN)
 	{ //found user != user of session
 		sess[pos].sessStatus = WAIT_FOR_PASS_LOGIN;
@@ -479,6 +779,73 @@ char *passCodeProcess(char messAcgument[], int pos)
 }
 
 //to do diff
+//Process while Code is CROOM, create a new room
+char *crrmCodeProcess(char messAcgument[], int pos)
+{
+	struct Room room;
+	int i = findRoomByName(messAcgument);
+	if (i >= 0)
+	{
+		return C_CRE_ROOM_FAI; //room exist
+	}
+	else
+	{
+		i = newRoom(messAcgument, sess[pos].connd, sess[pos].user);
+		sess[pos].room = rooms + i;
+		sess[pos].sessStatus = WAIT_FOR_REQUEST;
+		printStatus(CROOM, pos);
+		return C_CRE_ROOM_SUC;
+	}
+	return "Sequence Is Wrong";
+}
+
+//add User to room, i - position of rooms
+int addUserToRoom(int i, int connd, struct User user)
+{
+	int count = rooms[i].countUser;
+	if (count <= MAX_USER)
+	{
+		rooms[i].users[count] = user;
+		rooms[i].connd[count] = connd;
+		strcpy(rooms[i].noti[count].messToUser, C_NO_INFO);
+		rooms[i].countUser++;
+		printf("countUser:%d\n", rooms[i].countUser);
+		return 1;
+	}
+	else
+		return 0;
+}
+
+void sendToOtherUser(int your_pos, char messWantToSend[], struct sockaddr_in cliAddr, int connd)
+{
+	int o; //other user
+	o = findOtherUserInSessRoom(sess[your_pos].user.id, your_pos);
+	strcpy(sess[your_pos].room->noti[o].messToUser, messWantToSend);
+	changeFull(sess[your_pos].room->noti[o].messToUser, cliAddr, connd);
+}
+
+//Process while Code is UJOIN
+char *joinCodeProcess(char messAcgument[], int pos, struct sockaddr_in cliAddr, int connd)
+{
+	//in ra nguoi choi ... da vao phong ...
+	//them nguoi choi vao room nay
+	int i = findRoomByName(messAcgument);
+	if (i < 0) //phong khong ton tai
+		return C_NON_EXIST_ROOM;
+	if (rooms[i].roomStatus == PLAY) //phong dang choi
+		return C_PLAYING_ROOM;
+	if (rooms[i].countUser == MAX_USER_IN_ROOM)
+		return C_MAX_USER_IN_ROOM;
+	if (addUserToRoom(i, connd, sess[pos].user))
+	{
+		sess[pos].room = rooms + i;
+		sendToOtherUser(pos, C_USER_JOIN, cliAddr, connd);
+		sess[pos].sessStatus = WAIT_FOR_REQUEST;
+		printStatus(UJOIN, pos);
+		return C_IN_ROOM;
+	}
+	return "Sequence Is Wrong";
+}
 
 //Process while Code is LOGOU
 char *loutCodeProcess(char messAcgument[], int pos)
@@ -490,7 +857,7 @@ char *loutCodeProcess(char messAcgument[], int pos)
 		sess[pos].isLogin = USER_NOT_LOGIN;
 		user = newUser(UNKNOWN, "", ACTIVE);
 		memcpy(&(sess[pos].user), &user, sizeof(struct User));
-		printStatus(LOGOU,pos);
+		printStatus(LOGOU, pos);
 		return C_LOGOUT_OK;
 	}
 	else
@@ -508,7 +875,7 @@ char *siguCodeProcess(char messAcgument[], struct sockaddr_in cliAddr, int connd
 	if (i != -1)
 		return C_SAME_USER; //if not found user
 	user = newUser(messAcgument, "", ACTIVE);
-	printf("%d)\n", sess[pos].sessStatus);
+	// printf("%d)\n", sess[pos].sessStatus);
 	if (sess[pos].sessStatus == WAIT_FOR_USERNAME_SIGNUP)
 	{ //found user != user of session
 		sess[pos].sessStatus = WAIT_FOR_PASS_SIGNUP;
@@ -547,34 +914,81 @@ char *sigpCodeProcess(char messAcgument[], int pos)
 }
 
 //Process while Code is SIGNC
-char *sigcCodeProcess(char messAcgument[], int pos)
+// char *sigcCodeProcess(char messAcgument[], int pos)
+// {
+// 	if (strcmp(sessSignup[pos].capcha, messAcgument) == 0) //check capcha
+// 	{
+// 		sessSignup[pos].sessStatus = SIGNUP_SUCCESSFUL;
+// 		sessSignup[pos].user.count = userCount;
+// 		if (addUser(sessSignup[pos].user))
+// 		{
+// 			writeUserToFile(FILE_NAME);
+// 			return C_CORRECT_CODE;
+// 		}
+// 	}
+// 	else
+// 		return C_INCORRECT_CODE;
+// }
+
+// Process while Code is GINFO
+char *ginfoCodeProcess(char messAcgument[], int pos)
 {
-	if (strcmp(sessSignup[pos].capcha, messAcgument) == 0) //check capcha
+	int i;
+	i = findUserInSessRoom(messAcgument, pos);
+	return sess[pos].room->noti[i].messToUser;
+}
+
+// Process while Code is RINFO
+char *rinfoCodeProcess(char messAcgument[], int pos)
+{
+	int i;
+	i = findUserInSessRoom(messAcgument, pos);
+	strcpy(sess[pos].room->noti[i].messToUser, C_NO_INFO);
+	return sess[pos].room->noti[i].messToUser;
+}
+
+//Process while Code is LEAV
+char *leavCodeProcess(char messAcgument[], int pos, struct sockaddr_in cliAddr, int connd)
+{
+	if (strcmp(sess[pos].room->name, messAcgument) != 0)
+		return C_LEAV_ROOM_FAI;
+	int posRoom = findRoomByName(messAcgument);
+	int posUserInRoom = findUserInSessRoom(sess[pos].user.id, pos);
+	if (rooms[posRoom].countUser < MAX_USER_IN_ROOM)
 	{
-		sessSignup[pos].sessStatus = SIGNUP_SUCCESSFUL;
-		sessSignup[pos].user.count = userCount;
-		if (addUser(sessSignup[pos].user))
-		{
-			writeUserToFile(FILE_NAME);
-			return C_CORRECT_CODE;
-		}
+		removeRoom(posRoom);
 	}
 	else
-		return C_INCORRECT_CODE;
+	{
+		kickUser(posRoom, posUserInRoom); //kick user
+		sendToOtherUser(pos, C_USER_LEAVE, cliAddr, connd);
+	}
+	sess[pos].sessStatus = WAIT_FOR_REQUEST;
+	sess[pos].room = NULL;
+	printStatus(LEAVE, pos);
+	return C_LEAV_ROOM_SUC;
+	return "Sequence Is Wrong";
 }
 
 //process request
 char *process(char messCode[], char messAcgument[], struct sockaddr_in cliAddr, int connd)
 {
 	int pos, posSign, i;
-
-	pos = findSessByAddr(cliAddr, connd); //find Session return -1 if session not exists
-	posSign = findSessSignByAddr(cliAddr, connd);
-
-	// //test
-	printf("\tSession pos: %d\n", pos);
-	printf("\tSession status: %d\n", sess[pos].sessStatus);
-	printf("\tSession is login: %d\n", sess[pos].isLogin);
+	// printf("\tSession cond before: %d\n", connd);
+	if (strcmp(messCode, SINIT) != 0)
+	{
+		pos = findSessByAddr(cliAddr, connd);
+		//find Session return -1 if session not exists
+		posSign = findSessSignByAddr(cliAddr, connd);
+		if (strcmp(messCode, GINFO) != 0)
+		{ //Neu La ginfo thi ko in ra status, vi gui lien tuc, nen neu in ra lien tuc thi rat nhieu.
+			// //test
+			printf("\tSession pos: %d\n", pos);
+			printf("\tSession status: %d\n", sess[pos].sessStatus);
+			printf("\tSession is login: %d\n", sess[pos].isLogin);
+			printf("\tSession condcond: %d\n", sess[pos].connd);
+		}
+	}
 
 	// checkListRoom(); //todo diff
 
@@ -597,7 +1011,19 @@ char *process(char messCode[], char messAcgument[], struct sockaddr_in cliAddr, 
 	// Reset status ben server
 	if (strcmp(messCode, RESET) == 0)
 	{
-		return resetCodeProcess(cliAddr, connd, pos);
+		return resetCodeProcess(messAcgument, cliAddr, connd, pos);
+	}
+	/***********messcode is GINFO***********/
+	// Get message send to this.user
+	if (strcmp(messCode, GINFO) == 0)
+	{
+		return ginfoCodeProcess(sess[pos].user.id, pos);
+	}
+	/***********messcode is GINFO***********/
+	// Reset message sau khi nhan duoc
+	if (strcmp(messCode, RINFO) == 0)
+	{
+		return rinfoCodeProcess(sess[pos].user.id, pos);
 	}
 	/***********messcode is LOGIN***********/
 	if (strcmp(messCode, LOGIN) == 0)
@@ -636,6 +1062,23 @@ char *process(char messCode[], char messAcgument[], struct sockaddr_in cliAddr, 
 	{
 		return loutCodeProcess(messAcgument, pos);
 	}
+	/********messcode is CROOM**********/
+	if (strcmp(messCode, CROOM) == 0 && sess[pos].sessStatus == WAIT_FOR_RNAME_CREATE_ROOM)
+	{
+		return crrmCodeProcess(messAcgument, pos);
+	}
+	if (strcmp(messCode, SROOM) == 0 && sess[pos].sessStatus == WAIT_FOR_SEE_ROOM)
+	{
+		return C_SEE_ROOM_RESULT;
+	}
+	if (strcmp(messCode, UJOIN) == 0 && sess[pos].sessStatus == WAIT_FOR_RNAME_JOIN_ROOM)
+	{
+		return joinCodeProcess(messAcgument, pos, cliAddr, connd);
+	}
+	if (strcmp(messCode, LEAVE) == 0 && sess[pos].sessStatus == WAIT_FOR_LEAVE_ROOM)
+	{
+		return leavCodeProcess(messAcgument, pos, cliAddr, connd);
+	}
 	else
 	{
 		return "Process Sequence Is Wrong";
@@ -643,8 +1086,25 @@ char *process(char messCode[], char messAcgument[], struct sockaddr_in cliAddr, 
 }
 
 //convert to full message
-void changeFull(char message[])
+void changeFull(char message[], struct sockaddr_in cliAddr, int connd)
 {
+	int pos = findSessByAddr(cliAddr, connd);
+	int o;
+	if (strcmp(message, C_SEE_ROOM_RESULT) == 0)
+	{
+		getListRoomToken(message);
+	}
+	if (strcmp(message, C_IN_ROOM) == 0)
+	{
+		o = findOtherUserInSessRoom(sess[pos].user.id, pos);
+		strcat(message, "_");
+		strcat(message, sess[pos].room->users[o].id);
+	}
+	if (strcmp(message, C_USER_JOIN) == 0 || strcmp(message, C_USER_LEAVE) == 0)
+	{
+		strcat(message, "_");
+		strcat(message, sess[pos].user.id);
+	}
 	// if (strcmp(message, C_FOUND_PASSWORD) == 0)
 	// {
 	// 	strcat(message, " -> Password ok. Login successful!\n");
@@ -666,7 +1126,7 @@ int main(int argc, char *argv[])
 		return -1;
 	int PORT = atoi(argv[1]);
 	char buff[BUFF_SIZE];
-	char message[BUFF_SIZE], messCode[BUFF_SIZE], messAcgument[BUFF_SIZE];
+	char message[BUFF_SIZE], messCode[BUFF_SIZE], messAcgument[BUFF_SIZE], messTemp[BUFF_SIZE];
 	struct pollfd fds[BACKLOG];
 	struct sockaddr_in server_addr, client_addr;
 	int sin_size = sizeof(client_addr);
@@ -750,13 +1210,15 @@ int main(int argc, char *argv[])
 
 						if (isValidMessage(buff, messCode, messAcgument))
 						{
-							printf("-----------------------------------------------------------\n");
-							printf("RUNNING\n\tmessCode:%s\n\tmessAcgument:%s\n", messCode, messAcgument);
-
+							if (strcmp(messCode, GINFO) != 0)
+							{
+								printf("-----------------------------------------------------------\n");
+								printf("RUNNING\n\tmessCode:%s\n\tmessAcgument:%s\n", messCode, messAcgument);
+							}
 							strcpy(message, process(messCode, messAcgument, client_addr, fds[i].fd));
-
-							printf("\t\t==>Return to client: %s\n", message);
-							changeFull(message);
+							if (strcmp(message, C_NO_INFO) != 0) //Neu noti cu the thi se tra ve ma tuong ung. tranh nhan 404 lien tuc
+								printf("\t\t==>Return to client: %s\n", message);
+							changeFull(message, client_addr, fds[i].fd);
 						}
 						else
 						{
