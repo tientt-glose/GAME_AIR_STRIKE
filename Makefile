@@ -1,5 +1,5 @@
 CC=gcc
-CFLAGS=-I. -Wall -std=c99
+CFLAGS=-I. -Wall -std=c99 
 OBJ = server.o 
 OBJ2 = client.o
 %.o: %.c
@@ -12,3 +12,5 @@ client: $(OBJ2)
 
 clean:
 	rm *.o
+
+# -lncurses
