@@ -10,6 +10,7 @@
 #include <sys/ioctl.h>
 #include <termios.h>
 #include <stropts.h>
+#include <stdbool.h>
 
 #define BUFF_SIZE 8192
 #define DELIMITER "_"
@@ -17,10 +18,13 @@
 
 #define C_CHANGED_STATUS "99"
 #define C_INIT_SUCESS "100"
+
 // Notification
 #define C_NO_INFO "404"
 #define C_USER_JOIN "714"
 #define C_USER_LEAVE "912"
+#define C_USER_READY "1012"
+#define C_ALL_USER_READY "1013"
 
 // Signup Return
 // SS: WAIT_FOR_USERNAME_SIGNUP 11
@@ -67,15 +71,22 @@
 #define C_LEAV_ROOM_FAI "910"
 #define C_LEAV_ROOM_SUC "911"
 
+// Ready Return
+// SS: WAIT_FOR_READY 101
+#define C_READY_SUC "1010"
+#define C_ALL_READY_SUC "1011"
+
 // Unuse
 #define C_BLOCK "31"
 #define C_CORRECT_CODE "60"
 #define C_INCORRECT_CODE "61"
+#define BLOCKED 0
 
 // Client Status
 #define MENU 0
 #define MENU_LOGGED 3
 #define MENU_INROOM 8
+#define MENU_INGAME 11
 #define EXIT 'q' //Phai la dau nhay don de so sanh ky tu
 #define SIGNUP_ING 11
 #define SIGNUP_USERNAME_TYPED 12
@@ -86,6 +97,7 @@
 #define SEE_ROOM_ING 61
 #define JOIN_ROOM_ING 71
 #define LEAVE_ROOM_ING 91
+#define READY_ING 101
 
 //	Send to server for change status
 // Cac thong so danh cho viet init, reset trang thai. Voi moi loai se co kieu reset tuong ung.
@@ -100,9 +112,15 @@
 #define SEE_ROOM_REQUEST "61"
 #define JOIN_ROOM_REQUEST "71"
 #define LEAVE_ROOM_REQUEST "91"
+#define READY_REQUEST "101"
 
-#define BLOCKED 0
+// Status cua user trong phong va sess[poss] user. Khac voi struct user users
 #define ACTIVE 1
+#define READY 2
+//Status cua room
+#define WAIT 0
+#define PLAY 1
+
 #define MAX 100
 #define MAX_USER 10
 
@@ -337,6 +355,14 @@ char *makeFull(char respond[])
 	{
 		return "The room is full slot! Can not join.";
 	}
+	if (strcmp(respond, C_READY_SUC) == 0)
+	{
+		return "Ok! We know you are ready!";
+	}
+	if (strcmp(respond, C_ALL_READY_SUC) == 0)
+	{
+		return "Ok! We know you are ready! The other also ready!\n Let's play the game!";
+	}
 	if (strcmp(respond, C_LEAV_ROOM_SUC) == 0)
 	{
 		return "Leave room successful!";
@@ -349,7 +375,19 @@ char *makeFull(char respond[])
 	{
 		token = strtok(NULL, DELIMITER); //Name of the other user join the room
 		printf("The player %s join this room. ", token);
-		return "Please Ready to play the game and wait until the other user ready!";
+		return "Please Ready to play the game (if not) and wait until the other user ready!";
+	}
+	if (strcmp(token, C_USER_READY) == 0)
+	{
+		token = strtok(NULL, DELIMITER); //Name of the other user join the room
+		printf("The player %s is ready. ", token);
+		return "Please Ready to play the game (if not)!";
+	}
+	if (strcmp(token, C_ALL_USER_READY) == 0)
+	{
+		token = strtok(NULL, DELIMITER); //Name of the other user join the room
+		printf("All user is ready. You and %s.\n", token);
+		return "Let's play the game!";
 	}
 	if (strcmp(token, C_USER_LEAVE) == 0)
 	{
@@ -364,6 +402,7 @@ char *makeFull(char respond[])
 }
 int status;
 int userCount = 0;
+int play_flag = ACTIVE;
 char user_name[BUFF_SIZE + 1];
 char room_name[BUFF_SIZE + 1];
 int main(int argc, char const *argv[])
@@ -668,7 +707,10 @@ int main(int argc, char const *argv[])
 			break;
 
 		case MENU_INROOM:
-			printf("\nWelcome %s! In room %s.\n 1. Play Game (ready) \n 2. Leave Room \n", user_name, room_name);
+			if (play_flag == ACTIVE)
+				printf("\nWelcome %s! In room %s.\n 1. Play Game (ready) \n 2. Leave Room \n", user_name, room_name);
+			else
+				printf("\nWelcome %s! In room %s.\n 1. You are already ready\n 2. Leave Room \n", user_name, room_name);
 			printf("Wait other player join and ready. If you want to make request press any key!\n");
 			while (!_kbhit())
 			{
@@ -676,59 +718,105 @@ int main(int argc, char const *argv[])
 				requestAndReceive(client_sock, mess, respond);
 				strcpy(temp, respond);
 				token = strtok(temp, DELIMITER);
-				if (strcmp(token, C_USER_JOIN) == 0 || strcmp(token, C_USER_LEAVE) == 0)
+				if (strcmp(token, C_USER_JOIN) == 0 || strcmp(token, C_USER_LEAVE) == 0 || strcmp(token, C_USER_READY) == 0 || strcmp(token, C_ALL_USER_READY) == 0)
 				{
 					printf("\nRespond from server:\n");
 					printf("%s\n", makeFull(respond));
 					generateNormalPackage(mess, "RINFO", user_name);
 					requestAndReceive(client_sock, mess, respond);
-				}
-			}
-			printf("\nWelcome %s! In room %s.\n 1. Play Game (ready) \n 2. Leave Room \n", user_name, room_name);
-			printf("\nEnter your request: ");
-			scanf("%*c%d%*c", &op);
-			switch (op)
-			{
-			case 2:
-				status = LEAVE_ROOM_ING;
-				generateNormalPackage(mess, "ALERT", LEAVE_ROOM_REQUEST);
-				requestAndReceive(client_sock, mess, respond);
-				printf("\nRespond from server:\n%s\n", makeFull(respond));
-				while (status != MENU_LOGGED)
-				{
-					switch (status)
+					if (strcmp(token, C_ALL_USER_READY) == 0)
 					{
-					case LEAVE_ROOM_ING:
-						head = "LEAVE";
-						strcpy(buff, room_name);
-						strcat(buff, "\n");
-						break;
-
-					default:
+						status = MENU_INGAME;
 						break;
 					}
-					generateNormalPackage(mess, head, buff);
+				}
+			}
+			if (status == MENU_INROOM)
+			{
+				if (play_flag == ACTIVE)
+					printf("\nWelcome %s! In room %s.\n 1. Play Game (ready) \n 2. Leave Room \n", user_name, room_name);
+				else
+					printf("\nWelcome %s! In room %s.\n 1. You are already ready\n 2. Leave Room \n", user_name, room_name);
+				printf("\nEnter your request: ");
+				scanf("%*c%d%*c", &op);
+				switch (op)
+				{
+				case 1:
+					if (play_flag != ACTIVE)
+						break;
+					status = READY_ING;
+					generateNormalPackage(mess, "ALERT", READY_REQUEST);
 					requestAndReceive(client_sock, mess, respond);
 					printf("\nRespond from server:\n%s\n", makeFull(respond));
-
-					if (strcmp(respond, C_LEAV_ROOM_SUC) == 0 && status == LEAVE_ROOM_ING)
+					while (status != MENU_INGAME)
 					{
-						status = MENU_LOGGED;
-					}else{
-						input("test",buff);
+						switch (status)
+						{
+						case READY_ING:
+							head = "UREAD";
+							strcpy(buff, user_name);
+							strcat(buff, "\n");
+							break;
+
+						default:
+							break;
+						}
+						generateNormalPackage(mess, head, buff);
+						requestAndReceive(client_sock, mess, respond);
+						printf("\nRespond from server:\n%s\n", makeFull(respond));
+
+						if (strcmp(respond, C_ALL_READY_SUC) == 0 && status == READY_ING)
+						{
+							play_flag = READY;
+							status = MENU_INGAME;
+						}
+						else if (strcmp(respond, C_READY_SUC) == 0)
+						{
+							play_flag = READY;
+							status = MENU_INROOM;
+							break;
+						}
 					}
+					break;
+				case 2:
+					status = LEAVE_ROOM_ING;
+					generateNormalPackage(mess, "ALERT", LEAVE_ROOM_REQUEST);
+					requestAndReceive(client_sock, mess, respond);
+					printf("\nRespond from server:\n%s\n", makeFull(respond));
+					while (status != MENU_LOGGED)
+					{
+						switch (status)
+						{
+						case LEAVE_ROOM_ING:
+							head = "LEAVE";
+							strcpy(buff, room_name);
+							strcat(buff, "\n");
+							break;
+
+						default:
+							break;
+						}
+						generateNormalPackage(mess, head, buff);
+						requestAndReceive(client_sock, mess, respond);
+						printf("\nRespond from server:\n%s\n", makeFull(respond));
+
+						if (strcmp(respond, C_LEAV_ROOM_SUC) == 0 && status == LEAVE_ROOM_ING)
+						{
+							status = MENU_LOGGED;
+							play_flag = ACTIVE;
+						}
+					}
+					break;
+
+				default:
+					break;
 				}
-				break;
-
-			default:
-				break;
 			}
-			// puts("Request:");
-			// getchar();
-			// puts("Request:");
-			// getchar();
 			break;
-
+		case MENU_INGAME:
+			printf("\n\nIt's Yours. Nguyen さん\n. Pls Ctrl + C to do another test. :))\n\n");
+			input("Test:", buff);
+			break;
 		default:
 			break;
 		}

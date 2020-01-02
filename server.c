@@ -28,6 +28,7 @@
 #define GINFO "GINFO"
 #define RINFO "RINFO"
 #define LEAVE "LEAVE"
+#define UREAD "UREAD"
 
 // Message tra ve client
 #define C_CHANGED_STATUS "99"
@@ -37,6 +38,8 @@
 #define C_NO_INFO "404"
 #define C_USER_JOIN "714"
 #define C_USER_LEAVE "912"
+#define C_USER_READY "1012"
+#define C_ALL_USER_READY "1013"
 
 // Signup
 // SS: WAIT_FOR_USERNAME_SIGNUP 11
@@ -82,6 +85,11 @@
 #define C_LEAV_ROOM_FAI "910"
 #define C_LEAV_ROOM_SUC "911"
 
+// Ready Return
+// SS: WAIT_FOR_READY 101
+#define C_READY_SUC "1010"
+#define C_ALL_READY_SUC "1011"
+
 // Unuse
 #define C_BLOCK "31"
 #define C_CORRECT_CODE "60"
@@ -92,6 +100,7 @@
 #define NOT_AUTHENTICATED 2
 #define AUTHENTICATED 3
 #define START_SIGNUP 4
+#define BLOCKED 0
 
 // Status cua client
 #define IN_MENU "0" //Phuc vu cho viec reset khi ng dung bam "q". Co su khac nhau giua 2 menu
@@ -108,13 +117,16 @@
 #define WAIT_FOR_SEE_ROOM 61
 #define WAIT_FOR_RNAME_JOIN_ROOM 71
 #define WAIT_FOR_LEAVE_ROOM 91
+#define WAIT_FOR_READY 101
 
 // Status isLogin cua session
 #define USER_NOT_LOGIN 0
 #define USER_LOGIN 1
 
-#define BLOCKED 0
+// Status cua user trong phong va sess[poss] user. Khac voi struct user users
 #define ACTIVE 1
+#define READY 2
+//Status cua room
 #define WAIT 0
 #define PLAY 1
 
@@ -847,6 +859,38 @@ char *joinCodeProcess(char messAcgument[], int pos, struct sockaddr_in cliAddr, 
 	return "Sequence Is Wrong";
 }
 
+//Process while Code is UREAD
+char *readyCodeProcess(char messAcgument[], int pos, struct sockaddr_in cliAddr, int connd)
+{
+	printf("Vao\n");
+	int posUser = findUserById(messAcgument);
+	int posUserInRoom = findUserInSessRoom(messAcgument, pos);
+	int posOtherUserInRoom = findOtherUserInSessRoom(messAcgument, pos);
+	sess[pos].room->users[posUserInRoom].userStatus = READY;
+	sess[pos].user.userStatus = READY;
+	users[posUser].userStatus = READY;
+	if (sess[pos].room->countUser == MAX_USER_IN_ROOM)
+	{
+		if (sess[pos].room->users[posOtherUserInRoom].userStatus == READY)
+		{
+			sendToOtherUser(pos, C_ALL_USER_READY, cliAddr, connd);
+			sess[pos].room->roomStatus = PLAY;
+			sess[pos].sessStatus = WAIT_FOR_REQUEST;
+			printStatus(UREAD, pos);
+			return C_ALL_READY_SUC;
+		}
+		else
+		{
+			sendToOtherUser(pos, C_USER_READY, cliAddr, connd);
+		}
+	}
+	sess[pos].sessStatus = WAIT_FOR_REQUEST;
+	printStatus(UREAD, pos);
+	return C_READY_SUC;
+	printf("_Vao\n");
+	return "Sequence Is Wrong";
+}
+
 //Process while Code is LOGOU
 char *loutCodeProcess(char messAcgument[], int pos)
 {
@@ -963,11 +1007,15 @@ char *leavCodeProcess(char messAcgument[], int pos, struct sockaddr_in cliAddr, 
 		kickUser(posRoom, posUserInRoom); //kick user
 		sendToOtherUser(pos, C_USER_LEAVE, cliAddr, connd);
 	}
+	// Optional
+	int posUser = findUserById(sess[pos].user.id);
+	users[posUser].userStatus = ACTIVE;
+
+	sess[pos].user.userStatus = ACTIVE;
 	sess[pos].sessStatus = WAIT_FOR_REQUEST;
 	sess[pos].room = NULL;
 	printStatus(LEAVE, pos);
 	return C_LEAV_ROOM_SUC;
-	return "Sequence Is Wrong";
 }
 
 //process request
@@ -1067,14 +1115,22 @@ char *process(char messCode[], char messAcgument[], struct sockaddr_in cliAddr, 
 	{
 		return crrmCodeProcess(messAcgument, pos);
 	}
+	/********messcode is SROOM**********/
 	if (strcmp(messCode, SROOM) == 0 && sess[pos].sessStatus == WAIT_FOR_SEE_ROOM)
 	{
 		return C_SEE_ROOM_RESULT;
 	}
+	/********messcode is UJOIN**********/
 	if (strcmp(messCode, UJOIN) == 0 && sess[pos].sessStatus == WAIT_FOR_RNAME_JOIN_ROOM)
 	{
 		return joinCodeProcess(messAcgument, pos, cliAddr, connd);
 	}
+	/********messcode is UREAD**********/
+	if (strcmp(messCode, UREAD) == 0 && sess[pos].sessStatus == WAIT_FOR_READY)
+	{
+		return readyCodeProcess(messAcgument, pos, cliAddr, connd);
+	}
+	/********messcode is LEAVE**********/
 	if (strcmp(messCode, LEAVE) == 0 && sess[pos].sessStatus == WAIT_FOR_LEAVE_ROOM)
 	{
 		return leavCodeProcess(messAcgument, pos, cliAddr, connd);
@@ -1100,24 +1156,11 @@ void changeFull(char message[], struct sockaddr_in cliAddr, int connd)
 		strcat(message, "_");
 		strcat(message, sess[pos].room->users[o].id);
 	}
-	if (strcmp(message, C_USER_JOIN) == 0 || strcmp(message, C_USER_LEAVE) == 0)
+	if (strcmp(message, C_USER_JOIN) == 0 || strcmp(message, C_USER_LEAVE) == 0 || strcmp(message, C_USER_READY) == 0 || strcmp(message, C_ALL_USER_READY) == 0)
 	{
 		strcat(message, "_");
 		strcat(message, sess[pos].user.id);
 	}
-	// if (strcmp(message, C_FOUND_PASSWORD) == 0)
-	// {
-	// 	strcat(message, " -> Password ok. Login successful!\n");
-	// 	// to do diff. for more info
-	// }
-	// if (strcmp(message, C_CORRECT_PASS) == 0)
-	// {
-	// 	char capcha[6];
-	// 	strcpy(capcha, sessSignup[posCapchar].capcha);
-	// 	printf("cap:%s\n",capcha);
-	// 	strcat(message, " -> Please enter capcha code : ");
-	// 	strcat(message, capcha);
-	// }
 }
 
 int main(int argc, char *argv[])
