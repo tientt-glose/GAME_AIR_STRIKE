@@ -9,7 +9,7 @@
 #include <sys/select.h>
 #include <sys/ioctl.h>
 #include <termios.h>
-#include <stropts.h>
+//#include <stropts.h>
 #include <stdbool.h>
 
 #define BUFF_SIZE 8192
@@ -25,6 +25,7 @@
 #define C_USER_LEAVE "912"
 #define C_USER_READY "1012"
 #define C_ALL_USER_READY "1013"
+#define C_ALL_DONE_ADD_PLANE "1103"
 
 // Signup Return
 // SS: WAIT_FOR_USERNAME_SIGNUP 11
@@ -76,6 +77,11 @@
 #define C_READY_SUC "1010"
 #define C_ALL_READY_SUC "1011"
 
+//Add plane Return
+#define C_WAIT_ADD_PLANE "1100"
+#define C_ADD_PLANE_SUCCESS "1101"
+#define C_DONE_ADD_PLANE "1102"
+
 // Unuse
 #define C_BLOCK "31"
 #define C_CORRECT_CODE "60"
@@ -86,7 +92,8 @@
 #define MENU 0
 #define MENU_LOGGED 3
 #define MENU_INROOM 8
-#define MENU_INGAME 11
+#define MENU_ADDPLANE 11
+#define MENU_FIGHTING 12
 #define EXIT 'q' //Phai la dau nhay don de so sanh ky tu
 #define SIGNUP_ING 11
 #define SIGNUP_USERNAME_TYPED 12
@@ -98,7 +105,10 @@
 #define JOIN_ROOM_ING 71
 #define LEAVE_ROOM_ING 91
 #define READY_ING 101
-
+#define ADD_PLANE_ING 111
+#define WAIT_ENEMY_ADD_PLANE 121
+#define WAIT_ENEMY_SHOOT 131
+#define SHOOTING 141
 //	Send to server for change status
 // Cac thong so danh cho viet init, reset trang thai. Voi moi loai se co kieu reset tuong ung.
 // Chu yeu phuc vu cho viec nguoi dung bam "q" de exit viec nhap du lieu
@@ -113,6 +123,8 @@
 #define JOIN_ROOM_REQUEST "71"
 #define LEAVE_ROOM_REQUEST "91"
 #define READY_REQUEST "101"
+#define ADD_PLANE_REQUEST "111"
+#define SHOOT_PLANE_REQUEST "121"
 
 // Status cua user trong phong va sess[poss] user. Khac voi struct user users
 #define ACTIVE 1
@@ -122,7 +134,17 @@
 #define PLAY 1
 
 #define MAX 100
-#define MAX_USER 10
+#define MAX_USER 1000
+
+////GAME PLAY PART
+#define MAP_SIZE 10
+#define MAX_PLANE 5
+
+//Field Code
+#define F_ALIVE_PLANE 1
+#define F_MISSED_SHOT 2
+#define F_DEAD_PLANE 3
+#define F_EMPTY 0
 
 struct User
 {
@@ -246,6 +268,18 @@ char *makeFull(char respond[])
 {
 	char *token;
 	token = strtok(respond, DELIMITER);
+	if (strcmp(respond, C_DONE_ADD_PLANE) == 0)
+	{
+		return "Done add plane.Please ait for opponent!";
+	}
+	if (strcmp(respond, C_ADD_PLANE_SUCCESS) == 0)
+	{
+		return "Add plane Success!";
+	}
+	if (strcmp(respond, C_WAIT_ADD_PLANE) == 0)
+	{
+		return "Server known!";
+	}
 	if (strcmp(respond, C_CHANGED_STATUS) == 0)
 	{
 		return "Server known!";
@@ -395,16 +429,77 @@ char *makeFull(char respond[])
 		printf("Oh! The player %s leave this room. ", token);
 		return "Please Ready and wait until the other user join and ready!";
 	}
+	if (strcmp(respond, C_ALL_DONE_ADD_PLANE) == 0)
+	{
+		return "Set plane done!. Let's play the game.";
+	}
 	else
 	{
 		return respond;
 	}
 }
+
+////GAME PLAY PART
+
+void initField(int Field[][MAP_SIZE], int size)
+{
+	for (int i = 0; i < size; i++)
+	{
+		for (int j = 0; j < size; j++)
+		{
+			Field[i][j] = F_EMPTY; //khoi tao map
+		}
+	}
+}
+
+void printField(int playerField[][MAP_SIZE], int enemyField[][MAP_SIZE], int size)
+{
+	//TODO
+}
+
+void addPlane(int x, int y, int playerField[][MAP_SIZE], int mapSize)
+{
+	playerField[x][y] = F_ALIVE_PLANE;
+};
+
+void shoot(int x, int y, int enemyField[][MAP_SIZE], int mapSize)
+{
+	//TODO
+}
+
+void enemyShoot(int x, int y, int playerField[][MAP_SIZE], int mapSize)
+{
+	if (playerField[x][y] == F_ALIVE_PLANE)
+	{
+		playerField[x][y] = F_DEAD_PLANE;
+	}
+	else
+	{
+		playerField[x][y] = F_MISSED_SHOT;
+	}
+}
+int isValidPlanePosition(int x, int y, int playerField[][MAP_SIZE], int mapSize)
+{
+	printf("1111");
+	if ((0 > x) || (x >= MAP_SIZE) || (0 > y) || (y >= MAP_SIZE))
+	{
+		printf("222");
+		return 0;
+	}
+	if (playerField[x][y] != F_EMPTY)
+	{
+
+		return 0;
+	}
+	return 1;
+}
+
 int status;
 int userCount = 0;
 int play_flag = ACTIVE;
 char user_name[BUFF_SIZE + 1];
 char room_name[BUFF_SIZE + 1];
+
 int main(int argc, char const *argv[])
 {
 	int SERVER_PORT;
@@ -414,6 +509,11 @@ int main(int argc, char const *argv[])
 	struct sockaddr_in server_addr;
 	int msg_len, bytes_sent, bytes_received, check;
 	int op;
+
+	int playerField[MAP_SIZE][MAP_SIZE];
+	int enemyField[MAP_SIZE][MAP_SIZE];
+	initField(playerField, MAP_SIZE);
+	initField(enemyField, MAP_SIZE);
 
 	if (argc != 3)
 	{
@@ -726,7 +826,7 @@ int main(int argc, char const *argv[])
 					requestAndReceive(client_sock, mess, respond);
 					if (strcmp(token, C_ALL_USER_READY) == 0)
 					{
-						status = MENU_INGAME;
+						status = MENU_ADDPLANE;
 						break;
 					}
 				}
@@ -748,7 +848,7 @@ int main(int argc, char const *argv[])
 					generateNormalPackage(mess, "ALERT", READY_REQUEST);
 					requestAndReceive(client_sock, mess, respond);
 					printf("\nRespond from server:\n%s\n", makeFull(respond));
-					while (status != MENU_INGAME)
+					while (status != MENU_ADDPLANE)
 					{
 						switch (status)
 						{
@@ -768,7 +868,7 @@ int main(int argc, char const *argv[])
 						if (strcmp(respond, C_ALL_READY_SUC) == 0 && status == READY_ING)
 						{
 							play_flag = READY;
-							status = MENU_INGAME;
+							status = MENU_ADDPLANE;
 						}
 						else if (strcmp(respond, C_READY_SUC) == 0)
 						{
@@ -813,9 +913,53 @@ int main(int argc, char const *argv[])
 				}
 			}
 			break;
-		case MENU_INGAME:
-			printf("\n\nIt's Yours. Nguyen さん\n. Pls Ctrl + C to do another test. :))\n\n");
-			input("Test:", buff);
+		case MENU_ADDPLANE:
+			status = ADD_PLANE_ING;
+			generateNormalPackage(mess, "ALERT", ADD_PLANE_REQUEST);
+			requestAndReceive(client_sock, mess, respond);
+			printf("\nRespond from server:\n%s\n", makeFull(respond));
+			int addProcess = 0;
+			int tempx = 0, tempy = 0;
+			char buff[500];
+			do
+			{
+				printf("Enter plane %d position: (format:x-y or q for exit): ", addProcess);
+				scanf("%d%*c%d%*c", &tempx, &tempy);
+				printf("%d-%d\n", tempx, tempy);
+				if (isValidPlanePosition(tempx, tempy, playerField, MAP_SIZE) == 0)
+				{
+					continue;
+				}
+				addPlane(tempx, tempy, playerField, MAP_SIZE);
+				addProcess++;
+				sprintf(buff, "%d-%d\n", tempx, tempy);
+				generateNormalPackage(mess, "ADDPL", buff);
+				requestAndReceive(client_sock, mess, respond);
+				printf("\nRespond from server:\n%s\n", makeFull(respond));
+			} while (addProcess != MAX_PLANE);
+			if (strcmp(respond, C_ALL_DONE_ADD_PLANE) == 0)
+			{
+				status = MENU_FIGHTING;
+				break;
+			}
+			while (!_kbhit())
+			{
+				generateNormalPackage(mess, "GINFO", user_name);
+				requestAndReceive(client_sock, mess, respond);
+				if (strcmp(respond, C_ALL_DONE_ADD_PLANE) == 0)
+				{
+					printf("\nRespond from server:\n");
+					printf("%s\n", makeFull(respond));
+					generateNormalPackage(mess, "RINFO", user_name);
+					requestAndReceive(client_sock, mess, respond);
+					status = MENU_FIGHTING;
+					break;
+				}
+			}
+			// input("test", buff);
+			break;
+		case MENU_FIGHTING:
+			input("test2", buff);
 			break;
 		default:
 			break;
