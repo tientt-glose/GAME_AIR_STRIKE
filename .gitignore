@@ -70,4 +70,12 @@ Module.symvers
 Mkfile.old
 dkms.conf
 
+# compiled file 
+server
+server.o
+
+client
+client.o
+
+
 # End of https://www.gitignore.io/api/visualstudiocode
