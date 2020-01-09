@@ -30,6 +30,8 @@
 #define LEAVE "LEAVE"
 #define UREAD "UREAD"
 
+#define ADDPL "ADDPL"
+
 // Message tra ve client
 #define C_CHANGED_STATUS "99"
 #define C_INIT_SUCESS "100"
@@ -40,6 +42,7 @@
 #define C_USER_LEAVE "912"
 #define C_USER_READY "1012"
 #define C_ALL_USER_READY "1013"
+#define C_ALL_DONE_ADD_PLANE "1103"
 
 // Signup
 // SS: WAIT_FOR_USERNAME_SIGNUP 11
@@ -90,6 +93,11 @@
 #define C_READY_SUC "1010"
 #define C_ALL_READY_SUC "1011"
 
+//Add plane Return
+#define C_WAIT_ADD_PLANE "1100"
+#define C_ADD_PLANE_SUCCESS "1101"
+#define C_DONE_ADD_PLANE "1102"
+
 // Unuse
 #define C_BLOCK "31"
 #define C_CORRECT_CODE "60"
@@ -118,6 +126,8 @@
 #define WAIT_FOR_RNAME_JOIN_ROOM 71
 #define WAIT_FOR_LEAVE_ROOM 91
 #define WAIT_FOR_READY 101
+#define WAIT_FOR_ADD_PLANE 111
+#define WAIT_FOR_SHOOT 121
 
 // Status isLogin cua session
 #define USER_NOT_LOGIN 0
@@ -137,6 +147,10 @@
 // To do diff
 #define MAX_SESSION 100
 #define FILE_NAME "account.txt"
+
+////GAME PLAY PART
+#define MAP_SIZE 10
+#define MAX_PLANE 5
 
 // DOTO: Khai Bao toan bo ham
 void changeFull(char message[], struct sockaddr_in cliAddr, int connd);
@@ -167,6 +181,18 @@ struct User users[MAX_USER];
 // 	int quesStatus; //da co nguoi tra loi nhanh nhat chua?
 // } Question;
 
+typedef struct
+{
+	int x;
+	int y;
+} Position;
+
+typedef struct
+{
+	int x;
+	int y;
+} Plane;
+
 struct Noti
 {
 	char messToUser[BUFF_SIZE];
@@ -180,10 +206,9 @@ struct Room
 	int connd[MAX_USER_IN_ROOM];
 	int countUser;
 	struct Noti noti[MAX_USER_IN_ROOM];
-	// NGUYEN: khai bao kieu du lieu game o day
-	// Question questions[MAX_QUESTION];
-	// int countQues;
 	int roomStatus;
+	int countPlane[MAX_USER_IN_ROOM];
+	Plane alivePlaneList[MAX_USER_IN_ROOM][MAX_PLANE];
 };
 
 struct Room rooms[MAX_ROOM];
@@ -714,6 +739,16 @@ char *alertCodeProcess(char messAcgument[], struct sockaddr_in cliAddr, int conn
 	{
 		return C_MAX_USER;
 	}
+	if (atoi(messAcgument) == WAIT_FOR_ADD_PLANE)
+	{
+		sess[pos].sessStatus = atoi(messAcgument);
+		//WAIT_FOR_USERNAME_SIGNUP
+		sess[pos].room->countPlane[0] = 0;
+		sess[pos].room->countPlane[1] = 0;
+		printStatus("ALERT", pos);
+		return C_CHANGED_STATUS;
+	}
+
 	sess[pos].sessStatus = atoi(messAcgument); //WAIT_FOR_USERNAME_SIGNUP
 	printStatus("ALERT", pos);
 	return C_CHANGED_STATUS;
@@ -887,8 +922,6 @@ char *readyCodeProcess(char messAcgument[], int pos, struct sockaddr_in cliAddr,
 	sess[pos].sessStatus = WAIT_FOR_REQUEST;
 	printStatus(UREAD, pos);
 	return C_READY_SUC;
-	printf("_Vao\n");
-	return "Sequence Is Wrong";
 }
 
 //Process while Code is LOGOU
@@ -988,6 +1021,7 @@ char *rinfoCodeProcess(char messAcgument[], int pos)
 	int i;
 	i = findUserInSessRoom(messAcgument, pos);
 	strcpy(sess[pos].room->noti[i].messToUser, C_NO_INFO);
+	printStatus(RINFO,pos);
 	return sess[pos].room->noti[i].messToUser;
 }
 
@@ -1017,6 +1051,52 @@ char *leavCodeProcess(char messAcgument[], int pos, struct sockaddr_in cliAddr, 
 	printStatus(LEAVE, pos);
 	return C_LEAV_ROOM_SUC;
 }
+//Process when code is ADDPL
+void handleAddMess(char buff[], int *x, int *y)
+{
+	(*x) = buff[0] - '0';
+	(*y) = buff[2] - '0';
+}
+// int addPlane(int x,int y,int posUser,Plane** planeList,int countPlane){
+// planeList[posUser][countPlane].x= x;
+// planeList[posUser][countPlane].y= y;
+// printf("add %d-%d\n",&planeList[posUser][countPlane].x,planeList[posUser][countPlane].y);
+// }
+
+char *addPlaneProcess(char messAcgument[], struct sockaddr_in cliAddr, int connd, int pos)
+{
+	int posUserInRoom = findUserInSessRoom(sess[pos].user.id, pos);
+	int posOtherUserInRoom = findOtherUserInSessRoom(sess[pos].user.id, pos);
+	int x, y;
+	handleAddMess(messAcgument, &x, &y);
+	// printf("%d-%d\n",x,y);
+
+	sess[pos].room->alivePlaneList[posUserInRoom][sess[pos].room->countPlane[posUserInRoom]].x = x;
+	sess[pos].room->alivePlaneList[posUserInRoom][sess[pos].room->countPlane[posUserInRoom]].y = y;
+
+	printf("add %d-%d\n", sess[pos].room->alivePlaneList[posUserInRoom][sess[pos].room->countPlane[posUserInRoom]].x, sess[pos].room->alivePlaneList[posUserInRoom][sess[pos].room->countPlane[posUserInRoom]].y);
+
+	sess[pos].room->countPlane[posUserInRoom]++;
+
+	if (sess[pos].room->countPlane[posUserInRoom] == MAX_PLANE)
+	{
+		if (sess[pos].room->countPlane[posOtherUserInRoom] == MAX_PLANE)
+		{
+			sendToOtherUser(pos, C_ALL_DONE_ADD_PLANE, cliAddr, connd);
+			sess[pos].sessStatus = WAIT_FOR_REQUEST;
+			printStatus(ADDPL, pos);
+			return C_ALL_DONE_ADD_PLANE;
+		}
+
+		sess[pos].sessStatus = WAIT_FOR_REQUEST;
+		printStatus(ADDPL, pos);
+		return C_DONE_ADD_PLANE;
+	}
+
+	// return
+	printStatus(ADDPL, pos);
+	return C_ADD_PLANE_SUCCESS;
+}
 
 //process request
 char *process(char messCode[], char messAcgument[], struct sockaddr_in cliAddr, int connd)
@@ -1039,6 +1119,13 @@ char *process(char messCode[], char messAcgument[], struct sockaddr_in cliAddr, 
 	}
 
 	// checkListRoom(); //todo diff
+
+	/***********messcode is ADDPL***********/
+	// Add plane ben server
+	if (strcmp(messCode, ADDPL) == 0)
+	{
+		return addPlaneProcess(messAcgument, cliAddr, connd, pos);
+	}
 
 	/***********messcode is SINIT***********/
 	// Khoi tao status ben server
