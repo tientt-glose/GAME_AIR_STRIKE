@@ -131,7 +131,7 @@
 #define PLAY 1
 
 #define MAX_NUMBER_LOGIN 10
-#define MAX_USER 10
+#define MAX_USER 1000
 #define MAX_USER_IN_ROOM 2
 #define MAX_ROOM 10
 // To do diff
