@@ -105,8 +105,8 @@
 #define C_DONE_ADD_PLANE "1102"
 
 //Start shoot return
-#define C_YOUR_TURN_SHOOT "1200"
-#define C_WAIT_FOR_SHOOT "1201"
+#define C_YOUR_TURN_SHOOT "1500"
+#define C_WAIT_FOR_SHOOT "1501"
 
 // Unuse
 #define C_BLOCK "31"
@@ -139,6 +139,7 @@
 #define WAIT_FOR_ADD_PLANE 111
 #define WAIT_ENEMY_ADD_PLANE 121
 #define WAIT_ENEMY_SHOOT 131
+#define WAITS_ENEMY_SHOOT "131"
 #define SHOOTING 141
 
 // Status isLogin cua session
@@ -156,6 +157,7 @@
 #define MAX_USER 1000
 #define MAX_USER_IN_ROOM 2
 #define MAX_ROOM 10
+#define ULTIMATE_USER 0
 // To do diff
 #define MAX_SESSION 100
 #define FILE_NAME "account.txt"
@@ -763,13 +765,11 @@ char *alertCodeProcess(char messAcgument[], struct sockaddr_in cliAddr, int conn
 	if (atoi(messAcgument) == WAIT_ENEMY_SHOOT)
 	{
 		sess[pos].sessStatus = atoi(messAcgument);
-		time_t t;
-		srand((unsigned) time(&t));
-		sess[pos].room->whoGoFirst = rand() % 2;
-		printf("goFirst: %d\n",sess[pos].room->whoGoFirst);
-		printStatus("ALERT", pos);
-
 		int posUserInRoom = findUserInSessRoom(sess[pos].user.id, pos);
+
+		printf("goFirst: %d\n",sess[pos].room->whoGoFirst);
+
+		printStatus("ALERT", pos);
 		if(posUserInRoom == sess[pos].room->whoGoFirst){
 			return C_YOUR_TURN_SHOOT;
 		}
@@ -1043,9 +1043,15 @@ char *ginfoCodeProcess(char messAcgument[], int pos)
 }
 
 // Process while Code is RINFO
-char *rinfoCodeProcess(char messAcgument[], int pos)
+char *rinfoCodeProcess(char messAcgument[],int pos)
 {
 	int i;
+	if (atoi(messAcgument) == WAIT_ENEMY_SHOOT) {
+		sess[pos].room->whoGoFirst=-1;
+	printf("%d\n",sess[pos].room->whoGoFirst);
+
+		return C_NO_INFO;
+	}
 	i = findUserInSessRoom(messAcgument, pos);
 	strcpy(sess[pos].room->noti[i].messToUser, C_NO_INFO);
 	printStatus(RINFO,pos);
@@ -1111,6 +1117,9 @@ char *addPlaneProcess(char messAcgument[], struct sockaddr_in cliAddr, int connd
 		{
 			sendToOtherUser(pos, C_ALL_DONE_ADD_PLANE, cliAddr, connd);
 			sess[pos].sessStatus = WAIT_FOR_REQUEST;
+								time_t t;
+		srand((unsigned) time(&t));
+		sess[pos].room->whoGoFirst = rand() % 2;
 			printStatus(ADDPL, pos);
 			return C_ALL_DONE_ADD_PLANE;
 		}
@@ -1130,18 +1139,19 @@ char* shootProcess(char messAcgument[], struct sockaddr_in cliAddr, int connd, i
 	int posOtherUserInRoom = findOtherUserInSessRoom(sess[pos].user.id, pos);
 	int x, y;
 	handleAddMess(messAcgument, &x, &y);
-	
+	printf("%d_%d\n",x,y);
 	int count = sess[pos].room->countPlane[posOtherUserInRoom];
 	//check hit
 	for(int i=0;i<count;i++){
 		if((sess[pos].room->alivePlaneList[posOtherUserInRoom][i].x == x)&&(sess[pos].room->alivePlaneList[posOtherUserInRoom][i].y == y)){
 			//xoa bo may bay bi ban trung
 			for(int j=i;j<count-1;j++){
-				sess[pos].room->alivePlaneList[posOtherUserInRoom][i].x=sess[pos].room->alivePlaneList[posOtherUserInRoom][i+1].x;
-				sess[pos].room->alivePlaneList[posOtherUserInRoom][i].y=sess[pos].room->alivePlaneList[posOtherUserInRoom][i+1].y;
+				sess[pos].room->alivePlaneList[posOtherUserInRoom][j]=sess[pos].room->alivePlaneList[posOtherUserInRoom][j+1];
+				// sess[pos].room->alivePlaneList[posOtherUserInRoom][j].x=sess[pos].room->alivePlaneList[posOtherUserInRoom][j+1].x;
+				// sess[pos].room->alivePlaneList[posOtherUserInRoom][j].y=sess[pos].room->alivePlaneList[posOtherUserInRoom][j+1].y;
 			}
 			sess[pos].room->countPlane[posUserInRoom]--;
-			printf("Count:%d",sess[pos].room->countPlane[posUserInRoom]);
+			// printf("Count:%d",sess[pos].room->countPlane[posUserInRoom]);
 
 			//check win condition
 			if(sess[pos].room->countPlane[posUserInRoom]==0){
@@ -1158,22 +1168,30 @@ char* shootProcess(char messAcgument[], struct sockaddr_in cliAddr, int connd, i
 			strcat(message, "_");
 			sprintf(str, "%d", x);
 			strcat(message, str);
+			strcat(message, "_");
 			sprintf(str, "%d", y);
 			strcat(message, str);
+			printf("%s\n",message);
 			sendToOtherUser(pos, message, cliAddr, connd);
 			return C_ALLY_SHOOT_HIT;
-			break;
 		}
 	}
 
 	sess[pos].sessStatus = WAIT_FOR_REQUEST;
 	printStatus(SHOOT, pos);
-	sendToOtherUser(pos, C_ENEMY_SHOOT_MISS, cliAddr, connd);
+	char message[100];
+			char str[100];
+			strcat(message,C_ENEMY_SHOOT_MISS);
+			strcat(message, "_");
+			sprintf(str, "%d", x);
+			strcat(message, str);
+			strcat(message, "_");
+			sprintf(str, "%d", y);
+			strcat(message, str);
+			printf("%s\n",message);
+			sendToOtherUser(pos, message, cliAddr, connd);
+
 	return C_ALLY_SHOOT_MISS;
-
-	
-
-	
 }
 
 //process request
@@ -1203,6 +1221,13 @@ char *process(char messCode[], char messAcgument[], struct sockaddr_in cliAddr, 
 	if (strcmp(messCode, ADDPL) == 0)
 	{
 		return addPlaneProcess(messAcgument, cliAddr, connd, pos);
+	}
+
+		/***********messcode is SHOOT***********/
+	// Add plane ben server
+	if (strcmp(messCode, SHOOT) == 0)
+	{
+		return shootProcess(messAcgument, cliAddr, connd, pos);
 	}
 
 	/***********messcode is SINIT***********/
@@ -1236,7 +1261,7 @@ char *process(char messCode[], char messAcgument[], struct sockaddr_in cliAddr, 
 	// Reset message sau khi nhan duoc
 	if (strcmp(messCode, RINFO) == 0)
 	{
-		return rinfoCodeProcess(sess[pos].user.id, pos);
+		return rinfoCodeProcess(messAcgument,pos);
 	}
 	/***********messcode is LOGIN***********/
 	if (strcmp(messCode, LOGIN) == 0)
