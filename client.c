@@ -640,7 +640,7 @@ int main(int argc, char const *argv[])
 		switch (status)
 		{
 		case MENU:
-			printf("\nWelcome! \n 1. Sign up \n 2. Log in\n");
+			printf("\nWelcome! \n 1. Sign up \n 2. Log in\n 3. Exit\n");
 			printf("\nEnter your request:");
 			scanf("%d%*c", &op);
 			switch (op)
@@ -748,7 +748,10 @@ int main(int argc, char const *argv[])
 				}
 
 				break;
-
+			case 3:
+				exit(1);
+				break;
+			
 			default:
 				break;
 			}

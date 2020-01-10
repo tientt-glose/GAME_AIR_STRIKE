@@ -557,8 +557,9 @@ int removeSession(int k)
 	int i;
 	for (i = k; i < sessCount - 1; ++i)
 	{
-		sess[k] = sess[k + 1];
+		sess[i] = sess[i + 1];
 	}
+	sessCount--;
 }
 
 //find session by cliAddr, return session position
@@ -619,7 +620,7 @@ int findRoomByName(char name[])
 void removeRoom(int k)
 {
 	int i;
-	for (i = k; i < countRoom; ++i)
+	for (i = k; i < countRoom -1; ++i)
 	{
 		rooms[k] = rooms[k + 1];
 	}
@@ -1452,10 +1453,14 @@ int main(int argc, char *argv[])
 					readFileUser(FILE_NAME);
 					// showUser();
 					//recieve data
+					
 					if ((nbytes = recv(fds[i].fd, buff, BUFF_SIZE, 0)) <= 0)
 					{
-						if (nbytes == 0)
+						if (nbytes == 0){
+							int pos=findSessByAddr(client_addr,fds[i].fd);
+							removeSession(pos);
 							printf("Server: socket %d out\n", fds[i].fd);
+						}
 						close(fds[i].fd);
 					}
 
