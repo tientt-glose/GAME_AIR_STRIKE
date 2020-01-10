@@ -123,6 +123,7 @@
 // Status cua client
 #define IN_MENU "0" //Phuc vu cho viec reset khi ng dung bam "q". Co su khac nhau giua 2 menu
 #define IN_MENU_LOGGED "3"
+#define IN_MENU_INROOM "8"
 
 // Status cua server
 #define WAIT_FOR_REQUEST 0
@@ -786,11 +787,19 @@ char *resetCodeProcess(char messAcgument[], struct sockaddr_in cliAddr, int conn
 {
 	struct User user;
 	sess[pos].sessStatus = WAIT_FOR_REQUEST;
+	int posUserInRoom = findUserInSessRoom(sess[pos].user.id,pos);
 	if (strcmp(messAcgument, IN_MENU) == 0)
 	{
 		user = newUser(UNKNOWN, "", ACTIVE);
 		memcpy(&(sess[pos].user), &user, sizeof(struct User));
 	}
+	if (strcmp(messAcgument, IN_MENU_INROOM) == 0){
+		sess[pos].user.userStatus=ACTIVE;
+		sess[pos].room->users[posUserInRoom].userStatus=ACTIVE;
+		sess[pos].room->roomStatus=WAIT;
+		sess[pos].room->countPlane[0]=sess[pos].room->countPlane[1]=0;
+	}
+
 	printStatus(RESET, pos);
 	return C_CHANGED_STATUS;
 }
@@ -930,7 +939,7 @@ char *readyCodeProcess(char messAcgument[], int pos, struct sockaddr_in cliAddr,
 	int posOtherUserInRoom = findOtherUserInSessRoom(messAcgument, pos);
 	sess[pos].room->users[posUserInRoom].userStatus = READY;
 	sess[pos].user.userStatus = READY;
-	users[posUser].userStatus = READY;
+	// users[posUser].userStatus = READY;
 	if (sess[pos].room->countUser == MAX_USER_IN_ROOM)
 	{
 		if (sess[pos].room->users[posOtherUserInRoom].userStatus == READY)
@@ -1076,7 +1085,7 @@ char *leavCodeProcess(char messAcgument[], int pos, struct sockaddr_in cliAddr, 
 	}
 	// Optional
 	int posUser = findUserById(sess[pos].user.id);
-	users[posUser].userStatus = ACTIVE;
+	// users[posUser].userStatus = ACTIVE;
 
 	sess[pos].user.userStatus = ACTIVE;
 	sess[pos].sessStatus = WAIT_FOR_REQUEST;
@@ -1181,7 +1190,7 @@ char* shootProcess(char messAcgument[], struct sockaddr_in cliAddr, int connd, i
 	printStatus(SHOOT, pos);
 	char message[100];
 			char str[100];
-			strcat(message,C_ENEMY_SHOOT_MISS);
+			strcpy(message,C_ENEMY_SHOOT_MISS);
 			strcat(message, "_");
 			sprintf(str, "%d", x);
 			strcat(message, str);

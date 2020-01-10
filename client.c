@@ -126,6 +126,7 @@
 // Chu yeu phuc vu cho viec nguoi dung bam "q" de exit viec nhap du lieu
 #define IN_MENU "0"
 #define IN_MENU_LOGGED "3" //Danh cho
+#define IN_MENU_INROOM "8"
 // Cac status gui di de bao server
 #define SIGNUP_REQUEST "11"
 #define LOGIN_REQUEST "21"
@@ -416,7 +417,7 @@ char *makeFull(char respond[])
 		printf("%d-%d\n", tempx, tempy);
 		return "Please check!\n";
 	}
-		if (strcmp(token, C_ENEMY_SHOOT_MISS) == 0)
+	if (strcmp(token, C_ENEMY_SHOOT_MISS) == 0)
 	{
 		token = strtok(NULL, DELIMITER);
 		tempx = atoi(token);
@@ -510,6 +511,7 @@ void initField(int Field[][MAP_SIZE], int size)
 
 void printField(int playerField[][MAP_SIZE], int enemyField[][MAP_SIZE], int size)
 {
+	printf("Your Field\t\t\tEnemy Field\n");
 	printf("   ");
 	for (int i = 0; i < MAP_SIZE; i++)
 	{
@@ -1017,9 +1019,8 @@ int main(int argc, char const *argv[])
 			char buff[500];
 			do
 			{
-				printf("Enter plane %d position: (format:x-y or q for exit): ", addProcess);
+				printf("Enter plane %d position: (format:x-y or q for exit): ", addProcess+1);
 				scanf("%d%*c%d%*c", &tempx, &tempy);
-				printf("%d-%d\n", tempx, tempy);
 				if (isValidPlanePosition(tempx, tempy, playerField, MAP_SIZE) == 0)
 				{
 					continue;
@@ -1099,13 +1100,6 @@ int main(int argc, char const *argv[])
 				{
 					printf("\nRespond from server:\n");
 					printf("%s\n", makeFull(respond));
-					int tempx = 0, tempy = 0;
-
-					token = strtok(NULL, DELIMITER);
-					tempx = atoi(token);
-					token = strtok(NULL, DELIMITER);
-					tempy = atoi(token);
-
 					enemyShoot(tempx, tempy, playerField, MAP_SIZE);
 					generateNormalPackage(mess, "RINFO", user_name);
 					requestAndReceive(client_sock, mess, respond);
@@ -1126,11 +1120,9 @@ int main(int argc, char const *argv[])
 			{
 				printf("Enter shoot position: (format:x-y or q for exit): ");
 				scanf("%d%*c%d%*c", &tempx, &tempy);
-				printf("%d-%d\n", tempx, tempy);
 			} while (isValidShootPosition(tempx, tempy, playerField, MAP_SIZE) != 1);
 			shootPlane(tempx, tempy, enemyField, MAP_SIZE);
 			sprintf(buff, "%d-%d\n", tempx, tempy);
-			printf("%s\n", buff);
 			generateNormalPackage(mess, "SHOOT", buff);
 			requestAndReceive(client_sock, mess, respond);
 			// printf("\nRespond from server:\n%s\n", makeFull(respond));
@@ -1139,7 +1131,6 @@ int main(int argc, char const *argv[])
 			{
 				hitPlane(tempx, tempy, enemyField, MAP_SIZE);
 				status = MENU_WIN;
-				printf("You Win");
 				break;
 			}
 			if (strcmp(respond, C_ALLY_SHOOT_HIT) == 0)
@@ -1161,15 +1152,25 @@ int main(int argc, char const *argv[])
 
 		case MENU_WIN:
 			printf("\nRespond from server:\n%s\n", makeFull(respond));
-			input("win", buff);
+			initField(playerField, MAP_SIZE);
+			initField(enemyField, MAP_SIZE);
+			printf("Now you can play again or leave room.");
+						generateNormalPackage(mess, "RESET", IN_MENU_INROOM);
+			requestAndReceive(client_sock, mess, respond);
+			play_flag=ACTIVE;
+			status=MENU_INROOM;
 			break;
 		case MENU_LOSE:
 			printf("\nRespond from server:\n%s\n", makeFull(respond));
 			generateNormalPackage(mess, "RINFO", user_name);
 			requestAndReceive(client_sock, mess, respond);
-			generateNormalPackage(mess, "RESET", IN_MENU_LOGGED);
+			initField(playerField, MAP_SIZE);
+			initField(enemyField, MAP_SIZE);
+			generateNormalPackage(mess, "RESET", IN_MENU_INROOM);
 			requestAndReceive(client_sock, mess, respond);
-			input("lose", buff);
+			printf("Now you can play again or leave room.");
+			status=MENU_INROOM;
+			play_flag=ACTIVE;
 			break;
 		default:
 			break;
